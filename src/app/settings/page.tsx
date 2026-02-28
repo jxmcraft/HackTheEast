@@ -2,7 +2,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClientOrThrow } from "@/utils/supabase/server";
 import { SettingsFormFull } from "./SettingsFormFull";
-import type { LearningMode } from "@/components/settings/LearningModeSelector";
 import type { AvatarStyle } from "@/components/settings/AvatarCustomizer";
 
 export default async function SettingsPage() {
@@ -11,17 +10,16 @@ export default async function SettingsPage() {
   if (!user) redirect("/login");
 
   const [{ data: prefs }, { data: profile }] = await Promise.all([
-    supabase.from("user_preferences").select("learning_mode, avatar_style, avatar_name").eq("id", user.id).single(),
+    supabase.from("user_preferences").select("avatar_style, avatar_name").eq("id", user.id).single(),
     supabase.from("profiles").select("email, canvas_api_url, canvas_api_key, last_canvas_sync_at").eq("id", user.id).single(),
   ]);
 
   const preferences = {
-    learning_mode: (prefs?.learning_mode ?? "text") as LearningMode,
     avatar_style: (prefs?.avatar_style ?? "encouraging") as AvatarStyle,
     avatar_name: prefs?.avatar_name ?? null,
   };
 
-  if (!prefs?.learning_mode) {
+  if (!prefs?.avatar_style) {
     await supabase.from("user_preferences").upsert(
       { id: user.id, learning_mode: "text", avatar_style: "encouraging" },
       { onConflict: "id" }

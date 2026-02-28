@@ -58,17 +58,15 @@ export async function POST(request: NextRequest) {
 
     const { data: prefs } = await supabase
       .from("user_preferences")
-      .select("learning_mode, avatar_style, avatar_name")
+      .select("avatar_style, avatar_name")
       .eq("id", user.id)
       .single();
 
-    const effectiveMode: LearningMode =
-      ["text", "slides", "audio"].includes(body.mode ?? "")
-        ? (body.mode as LearningMode)
-        : ((prefs?.learning_mode as LearningMode) ?? "text");
+    // Always generate text lesson first; podcast/slides are converted from the lesson UI.
+    const effectiveMode: LearningMode = "text";
 
     const preferences = {
-      learning_mode: (prefs?.learning_mode as LearningMode) ?? effectiveMode,
+      learning_mode: "text" as const,
       avatar_style: (prefs?.avatar_style as "strict" | "encouraging" | "socratic") ?? "encouraging",
       avatar_name: prefs?.avatar_name ?? null,
     };

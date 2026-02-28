@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { TextLessonView } from "./TextLessonView";
@@ -15,7 +15,7 @@ function getGenerationStatus(state: LessonContentState): string | null {
     return state.generatingMode === "slides" ? "Generating slide deck…" : "Generating podcast…";
   }
   if (state.loadingAudioVisual) {
-    return state.mode === "slides" ? "Loading slide deck…" : "Loading podcast…";
+    return state.loadingAudioVisualMode === "slides" ? "Loading slide deck…" : "Loading podcast…";
   }
   if (state.status === "loading") return "Generating lesson…";
   return null;
@@ -25,12 +25,16 @@ function GenerationStatusBanner({
   status,
   progress,
   step,
+  indeterminate,
 }: {
   status: string;
   progress?: number | null;
   step?: string | null;
+  /** When true, show an animated indeterminate progress bar (e.g. while loading saved audio/slides). */
+  indeterminate?: boolean;
 }) {
   const showProgressBar = typeof progress === "number" && progress >= 0;
+  const showIndeterminate = indeterminate && !showProgressBar;
   return (
     <div className="mb-6 -mx-6 -mt-6 md:-mx-10 md:-mt-10 rounded-t-xl border-b border-[var(--border)] bg-[var(--muted)]/40 px-6 py-8 md:px-10 md:py-10">
       <div className="flex flex-col items-center justify-center gap-4 text-center max-w-xl mx-auto">
@@ -43,7 +47,9 @@ function GenerationStatusBanner({
             {step ?? status}
           </h2>
           <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            Your lesson is being prepared and will be saved to your account.
+            {indeterminate || showProgressBar
+              ? "This may take a moment. Your lesson will be saved to your account."
+              : "Your lesson is being prepared and will be saved to your account."}
           </p>
         </div>
         {showProgressBar && (
@@ -55,6 +61,17 @@ function GenerationStatusBanner({
               />
             </div>
             <p className="text-xs text-[var(--muted-foreground)]">{progress}%</p>
+          </div>
+        )}
+        {showIndeterminate && (
+          <div className="w-full space-y-1">
+            <div className="h-2 w-full bg-[var(--border)] rounded-full overflow-hidden">
+              <div
+                className="h-full w-1/3 bg-[var(--primary)] rounded-full"
+                style={{ animation: "loading-shimmer 1.5s ease-in-out infinite" }}
+              />
+            </div>
+            <p className="text-xs text-[var(--muted-foreground)]">Loading…</p>
           </div>
         )}
       </div>
@@ -82,8 +99,12 @@ type LessonContentState = {
     script: string;
     voiceId?: string;
   } | null;
+  /** Which conversion is shown when audioVisual is set (podcast vs slides). */
+  audioVisualMode?: "podcast" | "slides" | null;
   /** True while fetching saved podcast/slide-deck (GET audio-visual). */
   loadingAudioVisual?: boolean;
+  /** Which mode we're loading when loadingAudioVisual is true. */
+  loadingAudioVisualMode?: "podcast" | "slides" | null;
   /** True only while POST /api/generate-audio-visual is in flight. */
   podcastGenerating?: boolean;
   /** Which audio-visual type we're generating when podcastGenerating is true. */
@@ -119,7 +140,6 @@ function getContentSummary(content: unknown, mode: string): string {
 
 export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLessonReady }: Props) {
   const [state, setState] = useState<LessonContentState>({ status: "idle" });
-  const attemptedAudioVisualKeyRef = useRef<string | null>(null);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -240,6 +260,7 @@ export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLes
             script: data.lesson.script ?? "",
             voiceId: voiceId ?? undefined,
           },
+          audioVisualMode: mode,
         }));
       } else {
         setState((s) => ({
@@ -268,6 +289,44 @@ export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLes
       clearInterval(interval);
     }
   }, [courseId, topic, context]);
+
+  /** Load saved podcast/slide deck or generate if not found. Call when user clicks Convert to podcast/slides. */
+  const loadOrGenerateAudioVisual = useCallback(
+    async (mode: "podcast" | "slides") => {
+      const lessonId = state.lessonId;
+      if (!lessonId) return;
+      setState((s) => ({ ...s, loadingAudioVisual: true, loadingAudioVisualMode: mode }));
+      try {
+        const res = await fetch(`/api/lessons/${lessonId}/audio-visual?mode=${mode}`);
+        if (res.ok) {
+          const data: { script?: string; slides?: SlideWithImage[]; audioUrl?: string; voiceId?: string } =
+            await res.json();
+          setState((s) => ({
+            ...s,
+            loadingAudioVisual: false,
+            loadingAudioVisualMode: null,
+            audioVisual: {
+              script: data.script ?? "",
+              slides: Array.isArray(data.slides) ? data.slides : [],
+              audioUrl: data.audioUrl ?? "",
+              voiceId: data.voiceId,
+            },
+            audioVisualMode: mode,
+          }));
+          return;
+        }
+        if (res.status === 404) {
+          setState((s) => ({ ...s, loadingAudioVisual: false, loadingAudioVisualMode: null }));
+          await generateAudioVisual(mode, lessonId);
+          return;
+        }
+        setState((s) => ({ ...s, loadingAudioVisual: false, loadingAudioVisualMode: null }));
+      } catch {
+        setState((s) => ({ ...s, loadingAudioVisual: false, loadingAudioVisualMode: null }));
+      }
+    },
+    [state.lessonId, generateAudioVisual]
+  );
 
   const loadExisting = useCallback(
     async (id: string) => {
@@ -312,54 +371,6 @@ export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLes
     }
   }, [lessonIdFromUrl, state.lessonId, state.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // When lesson is ready and mode is audio or slides: load saved podcast/slide-deck or auto-generate once.
-  useEffect(() => {
-    const lessonId = state.lessonId;
-    const mode = state.mode;
-    if (
-      state.status !== "ready" ||
-      !lessonId ||
-      (mode !== "audio" && mode !== "slides") ||
-      state.audioVisual != null ||
-      state.podcastGenerating
-    ) {
-      return;
-    }
-    const key = `${lessonId}:${mode}`;
-    if (attemptedAudioVisualKeyRef.current === key) return;
-    attemptedAudioVisualKeyRef.current = key;
-
-    setState((s) => ({ ...s, loadingAudioVisual: true }));
-    const apiMode = mode === "audio" ? "podcast" : "slides";
-    fetch(`/api/lessons/${lessonId}/audio-visual?mode=${apiMode}`)
-      .then((res) => {
-        if (res.ok) {
-          return res.json().then((data: { script?: string; slides?: SlideWithImage[]; audioUrl?: string; voiceId?: string }) => {
-            setState((s) => ({
-              ...s,
-              loadingAudioVisual: false,
-              audioVisual: {
-                script: data.script ?? "",
-                slides: Array.isArray(data.slides) ? data.slides : [],
-                audioUrl: data.audioUrl ?? "",
-                voiceId: data.voiceId,
-              },
-            }));
-          });
-        }
-        if (res.status === 404) {
-          setState((s) => ({ ...s, loadingAudioVisual: false }));
-          void generateAudioVisual(apiMode, lessonId);
-          return;
-        }
-        setState((s) => ({ ...s, loadingAudioVisual: false }));
-      })
-      .catch(() => {
-        attemptedAudioVisualKeyRef.current = null;
-        setState((s) => ({ ...s, loadingAudioVisual: false }));
-      });
-  }, [state.status, state.lessonId, state.mode, state.audioVisual, state.podcastGenerating, generateAudioVisual]);
-
   useEffect(() => {
     if (state.status === "ready" && state.lessonId && state.content && onLessonReady) {
       const summary = getContentSummary(state.content, state.mode ?? "text");
@@ -367,32 +378,56 @@ export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLes
     }
   }, [state.status, state.lessonId, state.content, state.mode, onLessonReady]);
 
-  if (state.status === "loading") {
+  // Show progress UI whenever we're loading or generating podcast/slide deck (even if status is still "ready")
+  if (state.loadingAudioVisual || state.podcastGenerating) {
     const statusMsg = getGenerationStatus(state);
     const banner = statusMsg ? (
       <GenerationStatusBanner
         status={statusMsg}
         progress={state.podcastGenerating ? (state.generationProgress ?? 0) : undefined}
         step={state.podcastGenerating ? state.generationStep : undefined}
+        indeterminate={state.loadingAudioVisual && !state.podcastGenerating}
       />
     ) : null;
-    if (state.podcastGenerating)
+    if (state.podcastGenerating) {
       return (
         <>
           {banner}
-          <AudioVisualLoading />
+          <AudioVisualLoading
+            step={state.generationStep ?? (state.generatingMode === "slides" ? "Generating slide deck…" : "Generating podcast…")}
+            progress={state.generationProgress ?? undefined}
+          />
         </>
       );
-    if (state.loadingAudioVisual)
+    }
+    if (state.loadingAudioVisual) {
       return (
         <>
           {banner}
           <div className="flex min-h-[280px] flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] p-8">
             <div className="animate-spin h-10 w-10 border-2 border-[var(--muted-foreground)] border-t-transparent rounded-full mb-4" aria-hidden />
-            <p className="text-[var(--muted-foreground)]">Loading your lesson…</p>
+            <p className="text-[var(--muted-foreground)]">{statusMsg ?? "Loading…"}</p>
+            <div className="mt-4 w-full max-w-xs h-2 bg-[var(--border)] rounded-full overflow-hidden">
+              <div
+                className="h-full w-1/3 bg-[var(--primary)] rounded-full"
+                style={{ animation: "loading-shimmer 1.5s ease-in-out infinite" }}
+              />
+            </div>
           </div>
         </>
       );
+    }
+  }
+
+  if (state.status === "loading") {
+    const statusMsg = getGenerationStatus(state);
+    const banner = statusMsg ? (
+      <GenerationStatusBanner
+        status={statusMsg}
+        progress={undefined}
+        step={undefined}
+      />
+    ) : null;
     return (
       <>
         {banner}
@@ -423,13 +458,13 @@ export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLes
     return (
       <div className="space-y-6">
         <AudioVisualPlayer
-          variant={state.mode === "audio" ? "podcast" : "slides"}
+          variant={state.audioVisualMode === "podcast" ? "podcast" : "slides"}
           audioUrl={state.audioVisual.audioUrl}
           slides={state.audioVisual.slides}
           script={state.audioVisual.script}
           voiceId={state.audioVisual.voiceId}
           onRegenerateWithVoice={
-            state.mode === "audio"
+            state.audioVisualMode === "podcast"
               ? (voiceId) => generateAudioVisual("podcast", state.lessonId, voiceId)
               : undefined
           }
@@ -439,18 +474,18 @@ export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLes
             type="button"
             onClick={() =>
               generateAudioVisual(
-                state.mode === "audio" ? "podcast" : "slides",
+                state.audioVisualMode === "podcast" ? "podcast" : "slides",
                 state.lessonId,
                 state.audioVisual?.voiceId
               )
             }
             className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/50 px-4 py-2 text-sm hover:bg-[var(--muted)]"
           >
-            {state.audioVisual?.audioUrl ? "Regenerate podcast" : "Regenerate slide deck"}
+            {state.audioVisualMode === "podcast" ? "Regenerate podcast" : "Regenerate slide deck"}
           </button>
           <button
             type="button"
-            onClick={() => setState((s) => ({ ...s, audioVisual: null }))}
+            onClick={() => setState((s) => ({ ...s, audioVisual: null, audioVisualMode: null }))}
             className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/50 px-4 py-2 text-sm hover:bg-[var(--muted)]"
           >
             Back to lesson
@@ -578,17 +613,17 @@ export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLes
       <div className="flex flex-wrap gap-3">
         <button
           type="button"
-          onClick={() => generateAudioVisual("podcast", state.lessonId)}
+          onClick={() => loadOrGenerateAudioVisual("podcast")}
           className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/50 px-4 py-2 text-sm hover:bg-[var(--muted)]"
         >
-          Generate podcast
+          Convert to podcast
         </button>
         <button
           type="button"
-          onClick={() => generateAudioVisual("slides", state.lessonId)}
+          onClick={() => loadOrGenerateAudioVisual("slides")}
           className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/50 px-4 py-2 text-sm hover:bg-[var(--muted)]"
         >
-          Generate slide deck
+          Convert to slide deck
         </button>
         <button
           type="button"
