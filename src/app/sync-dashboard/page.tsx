@@ -13,7 +13,6 @@ import {
   RefreshCw,
   PlusCircle,
   Settings,
-  Brain,
   XCircle,
   MessageCircle,
   ExternalLink,
@@ -58,6 +57,28 @@ type RecentLesson = {
   created_at: string;
 };
 
+type MaterialMeta = {
+  title?: string;
+  url?: string;
+  source?: string;
+  module_name?: string;
+};
+
+type CourseMaterial = {
+  canvas_item_id: string;
+  content_type: string;
+  metadata: MaterialMeta;
+  chunk_count: number;
+  preview: string;
+};
+
+type CourseWithMaterials = {
+  id: string;
+  name: string;
+  canvas_id: number;
+  materials: CourseMaterial[];
+};
+
 export default function SyncDashboardPage() {
   const [courses, setCourses] = useState<CanvasCourse[]>([]);
   const [assignments, setAssignments] = useState<CanvasAssignment[]>([]);
@@ -85,6 +106,7 @@ export default function SyncDashboardPage() {
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [calendarError, setCalendarError] = useState<string | null>(null);
   const [expandedCourses, setExpandedCourses] = useState<Set<number>>(new Set());
+  const [materialsByCanvasId, setMaterialsByCanvasId] = useState<Record<number, CourseMaterial[]>>({});
 
   async function loadProfile() {
     try {
@@ -147,6 +169,36 @@ export default function SyncDashboardPage() {
 
   useEffect(() => {
     loadStoredSync();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadMaterials() {
+      try {
+        const res = await fetch("/api/materials");
+        const text = await res.text();
+        if (!res.ok) return;
+        let data: { courses?: CourseWithMaterials[] } = {};
+        try {
+          data = JSON.parse(text) as typeof data;
+        } catch {
+          return;
+        }
+        if (cancelled) return;
+        const mapped: Record<number, CourseMaterial[]> = {};
+        for (const course of data.courses ?? []) {
+          mapped[course.canvas_id] = Array.isArray(course.materials) ? course.materials : [];
+        }
+        setMaterialsByCanvasId(mapped);
+      } catch {
+        if (!cancelled) setMaterialsByCanvasId({});
+      }
+    }
+
+    loadMaterials();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -515,14 +567,6 @@ export default function SyncDashboardPage() {
             >
               <Settings className="h-4 w-4" />
             </Link>
-            <Link
-              href="/memory"
-              className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-[var(--muted)]"
-              aria-label="Agent memory"
-            >
-              <Brain className="h-4 w-4" />
-              <span className="hidden sm:inline">Memory</span>
-            </Link>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <button
@@ -860,6 +904,7 @@ export default function SyncDashboardPage() {
                 const lessons = recentLessons
                   .filter((lesson) => lesson.course_id_canvas === course.id)
                   .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                const courseMaterials = materialsByCanvasId[course.id] ?? [];
                 const courseAssignments = assignments
                   .filter((assignment) => assignment.course_id === course.id)
                   .sort((a, b) => {
@@ -871,29 +916,54 @@ export default function SyncDashboardPage() {
                 return (
                   <div key={course.id} className="rounded-xl border border-[var(--border)] p-4">
                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <h3 className="font-semibold">{course.name}</h3>
+                      <Link href={`/memory/course/${course.id}`} className="block hover:opacity-90">
+                        <h3 className="font-semibold hover:underline">{course.name}</h3>
                         <p className="text-xs text-[var(--muted-foreground)]">Canvas ID: {course.id} {course.course_code ? `· ${course.course_code}` : ""}</p>
+                      </Link>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedCourses((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(course.id)) next.delete(course.id);
+                              else next.add(course.id);
+                              return next;
+                            })
+                          }
+                          className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs hover:bg-[var(--muted)]"
+                        >
+                          {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                          {isExpanded ? "Collapse" : "Expand"}
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setExpandedCourses((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(course.id)) next.delete(course.id);
-                            else next.add(course.id);
-                            return next;
-                          })
-                        }
-                        className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs hover:bg-[var(--muted)]"
-                      >
-                        {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                        {isExpanded ? "Collapse" : "Expand"}
-                      </button>
                     </div>
 
                     {isExpanded && (
-                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                      <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/10 p-3">
+                        <p className="mb-2 text-sm font-medium">Course Files</p>
+                        {courseMaterials.length === 0 ? (
+                          <p className="text-xs text-[var(--muted-foreground)]">No materials extracted yet.</p>
+                        ) : (
+                          <ul className="space-y-1.5">
+                            {courseMaterials.slice(0, 5).map((material) => (
+                              <li key={material.canvas_item_id} className="min-w-0 text-sm">
+                                <p className="break-words font-medium leading-snug">
+                                  {material.metadata?.title ?? material.canvas_item_id}
+                                </p>
+                                <p className="text-xs text-[var(--muted-foreground)]">
+                                  {material.chunk_count} chunks · {material.content_type}
+                                </p>
+                              </li>
+                            ))}
+                            {courseMaterials.length > 5 && (
+                              <p className="text-xs text-[var(--muted-foreground)]">+{courseMaterials.length - 5} more files</p>
+                            )}
+                          </ul>
+                        )}
+                      </div>
+
                       <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/10 p-3">
                         <p className="mb-2 text-sm font-medium">Relevant Lessons Taken</p>
                         {lessons.length === 0 ? (
