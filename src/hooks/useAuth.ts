@@ -29,11 +29,15 @@ export function useAuthState(): AuthState {
   const [state, setState] = useState<AuthState>({
     user: null,
     session: null,
-    loading: true,
+    loading: !!supabase,
     error: null,
   });
 
   useEffect(() => {
+    if (!supabase) {
+      setState((s) => ({ ...s, loading: false }));
+      return;
+    }
     let mounted = true;
 
     (async () => {
@@ -83,6 +87,7 @@ export function useSignIn() {
 
   const signIn = useCallback(
     async ({ email, password }: SignInCredentials) => {
+      if (!supabase) throw new Error("Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local");
       setLoading(true);
       setError(null);
       try {
@@ -111,6 +116,7 @@ export function useSignUp() {
 
   const signUp = useCallback(
     async ({ email, password, full_name }: SignUpCredentials) => {
+      if (!supabase) throw new Error("Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local");
       setLoading(true);
       setError(null);
       try {
@@ -141,6 +147,7 @@ export function useSignOut() {
   const [error, setError] = useState<AuthError | null>(null);
 
   const signOut = useCallback(async () => {
+    if (!supabase) return;
     setLoading(true);
     setError(null);
     try {
@@ -164,6 +171,7 @@ export function usePasswordReset() {
 
   const requestPasswordReset = useCallback(
     async (email: string, redirectTo?: string) => {
+      if (!supabase) throw new Error("Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local");
       setLoading(true);
       setError(null);
       try {

@@ -1,11 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import type { Session, User } from "@supabase/supabase-js";
-import { getSupabaseEnv } from "./env";
+import { getSupabaseEnvOrThrow } from "./env";
 
 export function createClient() {
   const cookieStore = cookies();
-  const { url, anonKey } = getSupabaseEnv();
+  const { url, anonKey } = getSupabaseEnvOrThrow();
 
   return createServerClient(url, anonKey, {
     cookies: {
