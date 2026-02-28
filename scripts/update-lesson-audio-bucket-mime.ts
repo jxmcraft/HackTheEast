@@ -1,7 +1,7 @@
 /**
- * Create the lesson-audio storage bucket in Supabase (for Phase 3 audio-visual lessons).
- * Run from project root: bun run scripts/create-lesson-audio-bucket.ts
- * Requires: NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env or .env.local.
+ * Update the lesson-audio bucket to allow video/mp4 and image MIME types (for Reels).
+ * Run once if you get "mime type video/mp4 is not supported" or "image/png is not supported".
+ * Run from project root: bun run scripts/update-lesson-audio-bucket-mime.ts
  */
 import path from "path";
 import { fileURLToPath } from "url";
@@ -10,6 +10,17 @@ import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 
 const BUCKET = "lesson-audio";
+
+const ALLOWED_MIME_TYPES = [
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/wav",
+  "audio/webm",
+  "video/mp4",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+];
 
 const scriptDir =
   typeof __dirname !== "undefined"
@@ -39,31 +50,17 @@ async function main() {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  const { data, error } = await supabase.storage.createBucket(BUCKET, {
+  const { data, error } = await supabase.storage.updateBucket(BUCKET, {
     public: true,
     fileSizeLimit: "50MB",
-    allowedMimeTypes: [
-      "audio/mpeg",
-      "audio/mp3",
-      "audio/wav",
-      "audio/webm",
-      "video/mp4",
-      "image/png",
-      "image/jpeg",
-      "image/webp",
-    ],
+    allowedMimeTypes: ALLOWED_MIME_TYPES,
   });
 
   if (error) {
-    const msg = (error as { message?: string }).message ?? String(error);
-    if (msg.includes("already exists") || msg.includes("duplicate")) {
-      console.log(`Bucket "${BUCKET}" already exists.`);
-      return;
-    }
     throw error;
   }
 
-  console.log(`Bucket "${BUCKET}" created.`, data ?? "");
+  console.log(`Bucket "${BUCKET}" updated to allow: ${ALLOWED_MIME_TYPES.join(", ")}.`, data ?? "");
 }
 
 main().catch((e) => {
