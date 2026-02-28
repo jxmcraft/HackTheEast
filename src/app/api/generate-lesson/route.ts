@@ -32,9 +32,6 @@ export async function POST(request: NextRequest) {
     let courseId = String(body.courseId ?? "").trim();
     let topic = String(body.topic ?? "").trim();
     let contextHint = String(body.context ?? "").trim() || undefined;
-    const mode: LearningMode = ["text", "slides", "audio"].includes(body.mode ?? "")
-      ? (body.mode as LearningMode)
-      : "text";
     const lessonId = typeof body.lessonId === "string" ? body.lessonId : null;
 
     if (lessonId && (!courseId || !topic)) {
@@ -64,8 +61,13 @@ export async function POST(request: NextRequest) {
       .eq("id", user.id)
       .single();
 
+    const effectiveMode: LearningMode =
+      ["text", "slides", "audio"].includes(body.mode ?? "")
+        ? (body.mode as LearningMode)
+        : ((prefs?.learning_mode as LearningMode) ?? "text");
+
     const preferences = {
-      learning_mode: (prefs?.learning_mode as LearningMode) ?? mode,
+      learning_mode: (prefs?.learning_mode as LearningMode) ?? effectiveMode,
       avatar_style: (prefs?.avatar_style as "strict" | "encouraging" | "socratic") ?? "encouraging",
       avatar_name: prefs?.avatar_name ?? null,
     };
@@ -75,7 +77,7 @@ export async function POST(request: NextRequest) {
       courseId,
       userId: user.id,
       contextHint,
-      mode,
+      mode: effectiveMode,
       preferences,
     });
 
@@ -88,7 +90,7 @@ export async function POST(request: NextRequest) {
 
     const updatePayload = {
       status: "completed" as const,
-      learning_mode: mode,
+      learning_mode: effectiveMode,
       content: result.content,
       sources: result.sources,
       fallback_used: result.fallbackUsed,
@@ -122,7 +124,7 @@ export async function POST(request: NextRequest) {
           topic,
           context: contextHint ?? null,
           status: "completed",
-          learning_mode: mode,
+          learning_mode: effectiveMode,
           content: result.content,
           sources: result.sources,
           fallback_used: result.fallbackUsed,
@@ -140,7 +142,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       lessonId: finalLessonId,
-      mode,
+      mode: effectiveMode,
       content: result.content,
       sources: result.sources,
       fallbackUsed: result.fallbackUsed,
