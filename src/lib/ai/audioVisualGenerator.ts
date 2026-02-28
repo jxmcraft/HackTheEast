@@ -1,7 +1,7 @@
 /**
- * Orchestrates MiniMax (structure), MiniMax TTS (podcast) or Featherless (slide images) by mode.
+ * Orchestrates MiniMax (structure), MiniMax TTS (podcast), and MiniMax Image (slide deck) by mode.
  * Podcast mode: MiniMax structure + MiniMax TTS only; slides get placeholders.
- * Slides mode: MiniMax structure + Featherless images only; no audio.
+ * Slides mode: MiniMax structure + MiniMax Image for slide backgrounds; no audio.
  */
 
 import type {
@@ -15,7 +15,8 @@ import type {
 import { generateLessonStructure } from "./minimaxService";
 import { generateAudioMinimax } from "@/lib/audio/minimaxTtsService";
 import { uploadAudioToStorage } from "@/lib/audio/elevenlabsService";
-import { generateAllSlideImages, getPlaceholderImage } from "@/lib/images/featherlessService";
+import { generateAllSlideImagesMinimax } from "@/lib/images/minimaxImageService";
+import { getPlaceholderImage } from "@/lib/images/featherlessService";
 
 const WORDS_PER_MINUTE = 150;
 
@@ -74,12 +75,11 @@ export async function generateAudioVisualLesson(request: GenerationRequest): Pro
     }
 
     if (isSlides) {
-      console.log("Step 2 (slides): Generating slide images with Featherless...");
-      // Slides mode: no audio; generate images only
+      console.log("Step 2 (slides): Generating slide images with MiniMax Image...");
     }
 
     const imageUrls =
-      isSlides ? await generateAllSlideImages(slides) : new Map<number, string>();
+      isSlides ? await generateAllSlideImagesMinimax(slides) : new Map<number, string>();
 
     const slidesWithImages: SlideWithImage[] = slides.map((slide) => ({
       ...slide,

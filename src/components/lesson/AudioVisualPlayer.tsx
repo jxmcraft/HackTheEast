@@ -351,7 +351,7 @@ export function AudioVisualPlayer({
         {isPlaceholder && (
           <div className="absolute top-4 left-4 right-4 text-center">
             <span className="inline-block px-3 py-1.5 rounded bg-black/60 text-gray-300 text-sm">
-              Slide image unavailable — use Regenerate slide deck with an image API for custom visuals
+              Slide image could not be generated for this slide
             </span>
           </div>
         )}
@@ -375,16 +375,31 @@ export function AudioVisualPlayer({
   );
 }
 
-export function AudioVisualLoading() {
+export function AudioVisualLoading({
+  step,
+  progress,
+}: { step?: string | null; progress?: number | null } = {}) {
+  const showProgress = typeof progress === "number" && progress >= 0;
   return (
     <div className="flex min-h-[70vh] flex-col items-center justify-center bg-gray-900 rounded-xl border border-[var(--border)]">
-      <div className="text-center">
+      <div className="text-center max-w-md w-full px-4">
         <div
           className="animate-spin w-16 h-16 border-4 border-green-500 border-t-transparent rounded-full mx-auto mb-4"
           aria-hidden
         />
-        <p className="text-white text-xl">Generating your lesson...</p>
+        <p className="text-white text-xl">{step ?? "Generating your lesson…"}</p>
         <p className="text-gray-400 mt-2">This may take a moment</p>
+        {showProgress && (
+          <div className="mt-6 w-full space-y-2">
+            <div className="h-2 w-full bg-gray-700 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-green-500 rounded-full transition-all duration-500"
+                style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
+              />
+            </div>
+            <p className="text-gray-400 text-sm">{progress}%</p>
+          </div>
+        )}
       </div>
     </div>
   );

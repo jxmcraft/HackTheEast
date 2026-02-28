@@ -1,15 +1,10 @@
-"use server";
-
 import { revalidatePath } from "next/cache";
 import { createClientOrThrow } from "@/utils/supabase/server";
-import type { LearningMode } from "@/components/settings/LearningModeSelector";
 import type { AvatarStyle } from "@/components/settings/AvatarCustomizer";
 
 export async function updatePreferences(formData: FormData) {
-  const learningMode = String(formData.get("learning_mode") ?? "text").trim() as LearningMode;
   const avatarStyle = String(formData.get("avatar_style") ?? "encouraging").trim() as AvatarStyle;
   const avatarName = String(formData.get("avatar_name") ?? "").trim() || null;
-  if (!["text", "audio", "slides"].includes(learningMode)) throw new Error("Invalid learning_mode");
   if (!["strict", "encouraging", "socratic"].includes(avatarStyle)) throw new Error("Invalid avatar_style");
 
   const supabase = createClientOrThrow();
@@ -19,7 +14,7 @@ export async function updatePreferences(formData: FormData) {
   const { error } = await supabase.from("user_preferences").upsert(
     {
       id: user.id,
-      learning_mode: learningMode,
+      learning_mode: "text", // fixed; learning method removed from settings
       avatar_style: avatarStyle,
       avatar_name: avatarName,
       updated_at: new Date().toISOString(),
