@@ -14,7 +14,7 @@ Next.js 14 (App Router) + TypeScript + Tailwind CSS + Supabase. Syncs courses, c
 
    Copy `.env.example` to `.env` (or `.env.local`) and set:
 
-   - **Supabase:** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (from [Supabase](https://supabase.com) project settings).
+   - **Supabase:** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (from [Supabase](https://supabase.com) project settings). For **background sync** (sync runs without blocking the UI), also set `SUPABASE_SERVICE_ROLE_KEY` (Project Settings → API → service_role secret).
    - **Canvas:** Set per user in **Settings** (Canvas API URL and Access Token); no env vars.
    - **LiteLLM (embeddings):** `LITELLM_EMBEDDING_API_BASE=http://localhost:4000`, `LITELLM_EMBEDDING_API_KEY=sk-1234`, `LITELLM_EMBEDDING_MODEL=minimax-embed` (or `featherless-embed`). Minimax and Featherless credentials are set only in the proxy’s environment
 
@@ -42,6 +42,8 @@ Next.js 14 (App Router) + TypeScript + Tailwind CSS + Supabase. Syncs courses, c
    Set LiteLLM vars in your env: `LITELLM_EMBEDDING_API_BASE=http://localhost:4000`, `LITELLM_EMBEDDING_API_KEY=sk-1234` (match `master_key` in `litellm/config.yaml`), `LITELLM_EMBEDDING_MODEL=minimax-embed` (or `featherless-embed`). Put proxy keys in `.env` or `.env.local` (they are loaded when you run `bun run proxy`; no OpenAI connection – traffic goes only to Minimax/Featherless): for **minimax-embed** set `MINIMAX_API_KEY`, `MINIMAX_GROUP_ID`, and `OPENAI_API_KEY` (same value as `MINIMAX_API_KEY`); for **featherless-embed** set `FEATHERLESS_API_KEY` and `OPENAI_API_KEY` (same as `FEATHERLESS_API_KEY`). See `litellm/config.yaml` for details.
 
    **Test embeddings:** With app and proxy running, open http://localhost:3000/api/embedding-test. You should get `{ "ok": true, "dimensions": 1536, ... }` when configured correctly.
+
+   **Lesson generation (Phase 3):** Set `FEATHERLESS_API_KEY` in `.env.local` for chat completions (works in Hong Kong and globally; no OpenAI required). Optional: `FEATHERLESS_CHAT_MODEL` (default: `Qwen/Qwen2.5-7B-Instruct`). Alternatively set `OPENAI_API_KEY` for OpenAI.
 
 5. Open [http://localhost:3000](http://localhost:3000) and go to **Sync Dashboard** to verify the Canvas connection (courses, calendar events, assignments in tables).
 

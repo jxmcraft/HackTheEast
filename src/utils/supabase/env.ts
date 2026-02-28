@@ -22,3 +22,15 @@ export function getSupabaseEnvOrThrow(): { url: string; anonKey: string } {
   return env;
 }
 
+/** Service role client for server-side background jobs (e.g. sync). Requires SUPABASE_SERVICE_ROLE_KEY. */
+export function getServiceRoleEnv(): { url: string; serviceRoleKey: string } {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    throw new Error(
+      "Missing SUPABASE_SERVICE_ROLE_KEY (required for background sync). Set in .env.local."
+    );
+  }
+  return { url, serviceRoleKey: key };
+}
+

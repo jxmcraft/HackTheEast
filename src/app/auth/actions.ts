@@ -3,23 +3,26 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 
-export async function login(formData: FormData) {
+export type LoginResult = { error: string | null; next?: string };
+
+export async function login(formData: FormData): Promise<LoginResult> {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const next = String(formData.get("next") ?? "/sync-dashboard");
 
   if (!email || !password) {
-    throw new Error("Email and password are required.");
+    return { error: "Email and password are required." };
   }
 
   const supabase = createClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
-    throw new Error(error.message);
+    return { error: error.message };
   }
 
-  redirect(next || "/sync-dashboard");
+  // Return success and let the client redirect so the response (with Set-Cookie) reaches the browser.
+  return { error: null, next: next || "/sync-dashboard" };
 }
 
 export async function signup(formData: FormData) {

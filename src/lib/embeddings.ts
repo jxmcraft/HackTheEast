@@ -4,6 +4,8 @@
  */
 
 const DEFAULT_DIM = 1536;
+const RATE_LIMIT_RETRIES = 3;
+const RATE_LIMIT_BACKOFF_MS = 2000;
 
 function getLiteLLMConfig(): { baseURL: string; apiKey: string; model: string } {
   const base = process.env.LITELLM_EMBEDDING_API_BASE ?? "";
@@ -17,6 +19,10 @@ function getLiteLLMConfig(): { baseURL: string; apiKey: string; model: string } 
   return { baseURL: base.replace(/\/$/, ""), apiKey: key, model };
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 /**
  * Generate embedding for one text via LiteLLM proxy.
  * Uses POST /embeddings (proxy path; not /v1/embeddings).
@@ -27,27 +33,45 @@ export async function generateEmbedding(text: string): Promise<number[]> {
   }
   const { baseURL, apiKey, model } = getLiteLLMConfig();
   const url = `${baseURL}/embeddings`;
-  let res: { data?: Array<{ embedding?: unknown }>; [k: string]: unknown };
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        input: text.slice(0, 8_000),
-      }),
-    });
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`${response.status} ${response.statusText}${body ? `: ${body.slice(0, 300)}` : ""}`);
+  let res: { data?: Array<{ embedding?: unknown }>; [k: string]: unknown } | undefined;
+  for (let attempt = 0; attempt <= RATE_LIMIT_RETRIES; attempt++) {
+    if (attempt > 0) {
+      await sleep(RATE_LIMIT_BACKOFF_MS * Math.pow(2, attempt - 1));
     }
-    res = (await response.json()) as typeof res;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`LiteLLM embeddings request failed: ${msg}`);
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          input: text.slice(0, 8_000),
+        }),
+      });
+      const contentType = response.headers.get("content-type") ?? "";
+      const bodyText = await response.text();
+      // #region agent log
+      if (contentType.indexOf("json") === -1 || bodyText.trimStart().startsWith("<")) fetch('http://127.0.0.1:7816/ingest/dcfe79ee-b938-4a53-8e78-211d2e2b322f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1f53d4'},body:JSON.stringify({sessionId:'1f53d4',hypothesisId:'H3',location:'embeddings.ts:generateEmbedding',message:'LiteLLM response not JSON',data:{status:response.status,contentType,bodyPreview:bodyText.slice(0,150)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      if (response.status === 429 && attempt < RATE_LIMIT_RETRIES) continue;
+      if (!response.ok) {
+        throw new Error(`${response.status} ${response.statusText}${bodyText ? `: ${bodyText.slice(0, 300)}` : ""}`);
+      }
+      res = JSON.parse(bodyText) as NonNullable<typeof res>;
+      break;
+    } catch (err) {
+      if (attempt === RATE_LIMIT_RETRIES) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`LiteLLM embeddings request failed: ${msg}`);
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes("429") && !msg.includes("Rate limit")) throw new Error(`LiteLLM embeddings request failed: ${msg}`);
+    }
+  }
+  if (res == null) {
+    throw new Error("LiteLLM embeddings: failed after rate limit retries");
   }
 
   // OpenAI shape: { data: [ { embedding: number[] } ] }

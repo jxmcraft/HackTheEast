@@ -1,8 +1,13 @@
 /**
  * Canvas data ingestion for AI Study Companion.
  * Fetches courses, modules, module items, pages, and files; extracts text for embedding.
+ * Follows links in Canvas pages/assignments and recursively scans linked websites for content.
  * Does NOT write to the database — returns materials for storeCourseMaterials().
  */
+
+import { createHash } from "crypto";
+import { extractLinksFromHTML, crawlLinkedPages } from "./link-scraper";
+import { fetchAndExtractDocument } from "./document-extractor";
 
 export type IngestedMaterial = {
   canvas_item_id: string;
@@ -14,6 +19,8 @@ export type IngestedMaterial = {
     created_at?: string;
     updated_at?: string;
     author?: string;
+    source?: "canvas" | "linked";
+    source_canvas_item_id?: string;
     [key: string]: unknown;
   };
 };
@@ -151,6 +158,19 @@ export class CanvasAPIClient {
     );
   }
 
+  /** GET /api/v1/courses/:course_id/front_page - returns the course front page or 404 if none set. */
+  async getFrontPage(courseId: string): Promise<CanvasPage | null> {
+    try {
+      return await this.fetch<CanvasPage>(
+        `/courses/${encodeURIComponent(courseId)}/front_page`
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("404") || msg.includes("No front page")) return null;
+      throw err;
+    }
+  }
+
   async getFile(courseId: string, fileId: number): Promise<CanvasFile> {
     return this.fetch<CanvasFile>(`/courses/${courseId}/files/${fileId}`);
   }
@@ -191,19 +211,12 @@ export function extractTextFromHTML(html: string): string {
 
 /**
  * Map Canvas module item type to our content_type.
+ * (Kept for potential use when classifying linked content.)
  */
-function toContentType(type: string): "lecture" | "file" | "page" | "assignment" {
-  switch (type) {
-    case "Page":
-      return "page";
-    case "File":
-      return "file";
-    case "Assignment":
-    case "Quiz":
-      return "assignment";
-    default:
-      return "lecture";
-  }
+/** Stable id for linked-page materials so re-sync can dedupe. */
+function linkedPageCanvasId(courseId: string, url: string): string {
+  const hash = createHash("sha256").update(url).digest("hex").slice(0, 16);
+  return `linked-${courseId}-${hash}`;
 }
 
 /**
@@ -239,6 +252,54 @@ export async function ingestCourseMaterials(
 
   const modules = await client.getCourseModules(courseId);
 
+  // Ingest course front page first (and all its links recursively)
+  try {
+    const frontPage = await client.getFrontPage(courseId);
+    if (frontPage?.body != null) {
+      const text = extractTextFromHTML(frontPage.body);
+      if (text) {
+        addMaterial(
+          `front-page-${courseId}-${frontPage.page_id ?? "front"}`,
+          "page",
+          text,
+          {
+            title: frontPage.title ?? "Course front page",
+            url: baseUrl.replace(/\/$/, "") + "/courses/" + courseId + "/pages/" + (frontPage.url ?? ""),
+            created_at: frontPage.created_at,
+            updated_at: frontPage.updated_at,
+            author: frontPage.last_edited_by?.display_name,
+            source: "canvas",
+            module_name: "Front page",
+          }
+        );
+      }
+      const frontLinks = extractLinksFromHTML(frontPage.body, baseUrl);
+      if (frontLinks.length > 0) {
+        try {
+          const linkedPages = await crawlLinkedPages(frontLinks, { maxPages: 25, maxDepth: 2 });
+          for (const lp of linkedPages) {
+            addMaterial(
+              linkedPageCanvasId(courseId, lp.url),
+              "page",
+              lp.text,
+              {
+                title: lp.title,
+                url: lp.url,
+                source: "linked",
+                source_canvas_item_id: `front-page-${courseId}-${frontPage.page_id ?? "front"}`,
+                module_name: "Front page",
+              }
+            );
+          }
+        } catch (linkErr) {
+          console.warn("Link crawl failed for front page:", linkErr instanceof Error ? linkErr.message : linkErr);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Front page fetch skipped:", err instanceof Error ? err.message : err);
+  }
+
   for (const mod of modules) {
     const items =
       mod.items && mod.items.length > 0
@@ -269,8 +330,38 @@ export async function ingestCourseMaterials(
                 created_at: page.created_at,
                 updated_at: page.updated_at,
                 author: page.last_edited_by?.display_name,
+                source: "canvas",
               }
             );
+          }
+          // Recursively scan links in this Canvas page and add linked web content as materials
+          const pageLinks = extractLinksFromHTML(page.body ?? "", baseUrl);
+          if (pageLinks.length > 0) {
+            try {
+              const linkedPages = await crawlLinkedPages(pageLinks, {
+                maxPages: 25,
+                maxDepth: 2,
+              });
+              for (const lp of linkedPages) {
+                addMaterial(
+                  linkedPageCanvasId(courseId, lp.url),
+                  "page",
+                  lp.text,
+                  {
+                    title: lp.title,
+                    url: lp.url,
+                    source: "linked",
+                    source_canvas_item_id: `page-${courseId}-${page.page_id ?? pageId}`,
+                    module_name: baseMeta.module_name,
+                  }
+                );
+              }
+            } catch (linkErr) {
+              console.warn(
+                `Link crawl failed for page ${pageId}:`,
+                linkErr instanceof Error ? linkErr.message : linkErr
+              );
+            }
           }
         } else if (item.type === "Assignment" && item.content_id) {
           const assignment = await client.getAssignment(courseId, item.content_id);
@@ -286,22 +377,66 @@ export async function ingestCourseMaterials(
                 url: assignment.html_url,
                 created_at: assignment.created_at,
                 updated_at: assignment.updated_at,
+                source: "canvas",
               }
             );
+          }
+          // Recursively scan links in assignment description and add linked web content
+          const descLinks = extractLinksFromHTML(assignment.description ?? "", baseUrl);
+          if (descLinks.length > 0) {
+            try {
+              const linkedPages = await crawlLinkedPages(descLinks, {
+                maxPages: 25,
+                maxDepth: 2,
+              });
+              for (const lp of linkedPages) {
+                addMaterial(
+                  linkedPageCanvasId(courseId, lp.url),
+                  "page",
+                  lp.text,
+                  {
+                    title: lp.title,
+                    url: lp.url,
+                    source: "linked",
+                    source_canvas_item_id: `assignment-${courseId}-${assignment.id}`,
+                    module_name: baseMeta.module_name,
+                  }
+                );
+              }
+            } catch (linkErr) {
+              console.warn(
+                `Link crawl failed for assignment ${assignment.id}:`,
+                linkErr instanceof Error ? linkErr.message : linkErr
+              );
+            }
           }
         } else if (item.type === "File" && item.content_id) {
           const file = await client.getFile(courseId, item.content_id);
           const title = file.display_name ?? file.filename ?? item.title;
+          const isPdf = /\.pdf$/i.test(file.filename ?? "") || /\.pdf$/i.test(file.url ?? "");
+          const isPptx = /\.pptx$/i.test(file.filename ?? "") || /\.pptx$/i.test(file.url ?? "");
+          let contentText = title;
+          if ((isPdf || isPptx) && file.url) {
+            try {
+              const doc = await fetchAndExtractDocument(file.url, {
+                headers: { Authorization: `Bearer ${accessToken}` },
+              });
+              if (doc?.text && doc.text.length >= 50) contentText = doc.text;
+            } catch (e) {
+              console.warn(`Failed to extract PDF/PPTX for file ${file.id}:`, e instanceof Error ? e.message : e);
+            }
+          }
           addMaterial(
             `file-${courseId}-${file.id}`,
             "file",
-            title,
+            contentText,
             {
               ...baseMeta,
               title,
               url: file.url,
               created_at: file.created_at,
               updated_at: file.updated_at,
+              source: "canvas",
             }
           );
         }

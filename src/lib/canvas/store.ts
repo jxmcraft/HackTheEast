@@ -3,6 +3,7 @@
  * All requests go through LiteLLM proxy (model from LITELLM_EMBEDDING_MODEL; configure Minimax/Featherless in litellm/config.yaml).
  */
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/server";
 import type { IngestedMaterial } from "@/lib/canvas/ingest";
 import {
@@ -11,7 +12,7 @@ import {
 } from "@/lib/embeddings";
 
 const CHUNK_OVERLAP = 100;
-const DELAY_MS = 150;
+const DELAY_MS = 300;
 
 function delay(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -45,12 +46,15 @@ export function chunkText(
  * Store ingested materials: chunk, generate embeddings, insert into course_materials.
  * courseId must be the internal course UUID (e.g. from public.courses.id).
  * Skips inserting when a row with the same canvas_item_id already exists (per chunk id).
+ * Pass supabase for background jobs (e.g. service-role client); otherwise uses request-scoped client.
+ * Optional onProgress(materialsInCourse, chunksInCourse) is called after each material so the sync progress bar can update live.
  */
 export async function storeCourseMaterials(
   courseId: string,
-  materials: IngestedMaterial[]
+  materials: IngestedMaterial[],
+  options?: { supabase?: SupabaseClient; onProgress?: (materialsInCourse: number, chunksInCourse: number) => void }
 ): Promise<{ materialsStored: number; chunksCreated: number }> {
-  const supabase = createClient();
+  const supabase = options?.supabase ?? createClient();
   let chunksCreated = 0;
   const seenMaterialKeys = new Set<string>();
 
@@ -105,6 +109,7 @@ export async function storeCourseMaterials(
       chunksCreated++;
     }
     if (chunks.length > 0) seenMaterialKeys.add(material.canvas_item_id);
+    options?.onProgress?.(seenMaterialKeys.size, chunksCreated);
   }
 
   return {

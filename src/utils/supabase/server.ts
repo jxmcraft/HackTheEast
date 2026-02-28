@@ -1,7 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import type { Session, User } from "@supabase/supabase-js";
-import { getSupabaseEnv } from "./env";
+import { getSupabaseEnv, getServiceRoleEnv } from "./env";
 
 export function createClient() {
   const env = getSupabaseEnv();
@@ -23,6 +24,15 @@ export function createClient() {
       },
     },
   });
+}
+
+/**
+ * Service-role Supabase client for background jobs (no request context).
+ * Use only in server-side background tasks (e.g. sync ingest).
+ */
+export function createServiceRoleClient() {
+  const { url, serviceRoleKey } = getServiceRoleEnv();
+  return createSupabaseClient(url, serviceRoleKey);
 }
 
 export async function getSession(): Promise<Session | null> {

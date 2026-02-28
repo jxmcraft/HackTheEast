@@ -1,0 +1,16 @@
+---
+description: Use Bun for all package and script commands in this project
+alwaysApply: true
+---
+
+# Use Bun
+
+This project uses **Bun** (not npm or yarn) for:
+
+- **Install dependencies:** `bun install` (never `npm install`)
+- **Add packages:** `bun add <pkg>` (never `npm install <pkg>`)
+- **Run scripts:** `bun run <script>` or `bun <script>` when supported (e.g. `bun dev`)
+- **Dev server:** `bun dev`
+- **Build/start:** `bun run build`, `bun run start`
+
+When suggesting or running terminal commands, always use `bun` instead of `npm` or `yarn`.

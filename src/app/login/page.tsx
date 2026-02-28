@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { login } from "@/app/auth/actions";
+import { LoginForm } from "./LoginForm";
 
 export default function LoginPage({
   searchParams,
 }: {
   searchParams?: { next?: string };
 }) {
-  const next = searchParams?.next ?? "/dashboard";
+  const next = searchParams?.next ?? "/sync-dashboard";
 
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
@@ -18,47 +18,7 @@ export default function LoginPage({
           </p>
         </header>
 
-        <form
-          action={login}
-          className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--card)] p-6"
-        >
-          <input type="hidden" name="next" value={next} />
-
-          <div className="space-y-2">
-            <label htmlFor="email" className="text-sm font-medium">
-              Email
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-              className="w-full rounded-lg border border-[var(--border)] bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--ring)]"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label htmlFor="password" className="text-sm font-medium">
-              Password
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              className="w-full rounded-lg border border-[var(--border)] bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--ring)]"
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="flex w-full items-center justify-center rounded-lg bg-white px-4 py-2 text-sm font-medium text-black hover:bg-neutral-200"
-          >
-            Sign in
-          </button>
-        </form>
+        <LoginForm next={next} />
 
         <p className="text-center text-sm text-[var(--muted-foreground)]">
           Don&apos;t have an account?{" "}

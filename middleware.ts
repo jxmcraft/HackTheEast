@@ -1,10 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-const PROTECTED_PREFIXES = ["/sync-dashboard", "/dashboard", "/settings"];
+const PROTECTED_PREFIXES = ["/sync-dashboard", "/dashboard", "/settings", "/lesson"];
 const AUTH_PREFIX = "/auth";
 
 export async function middleware(request: NextRequest) {
+  const { pathname, search } = request.nextUrl;
+  // API routes handle their own auth; skip Supabase in middleware to avoid throwing before the route runs
+  if (pathname.startsWith("/api")) {
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -30,7 +36,6 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname, search } = request.nextUrl;
   const isProtected = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p));
   const isAuthRoute = pathname.startsWith(AUTH_PREFIX);
 
@@ -55,11 +60,12 @@ export const config = {
   matcher: [
     /*
      * Run middleware on all routes except:
+     * - API routes (/api)
      * - next internals (_next)
      * - static assets
      * - favicon
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!api/|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
 
