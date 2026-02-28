@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   BookOpen,
-  Brain,
   CalendarDays,
   ChevronDown,
   ChevronLeft,
@@ -346,6 +345,7 @@ export default function SyncDashboardPage() {
       })
       .catch(() => {});
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount to resume polling; pollSyncStatus omitted to avoid re-running when callbacks change
   }, []);
 
   const syncAll = async () => {
@@ -384,9 +384,9 @@ export default function SyncDashboardPage() {
 
   const isLoading = loading !== "idle";
   const formatLastSync = (iso: string | null) =>
-    iso ? new Date(iso).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }) : null;
+    iso ? new Date(iso).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" }) : null;
   const formatDate = (s: string | null) =>
-    s ? new Date(s).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }) : "—";
+    s ? new Date(s).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" }) : "—";
   const toLocalDateKey = (date: Date) => {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -895,7 +895,7 @@ export default function SyncDashboardPage() {
                         <p className="truncate text-[var(--muted-foreground)]">
                           {event.allDay
                             ? "All day"
-                            : new Date(event.startAt).toLocaleTimeString(undefined, {
+                            : new Date(event.startAt).toLocaleTimeString("en-US", {
                                 hour: "numeric",
                                 minute: "2-digit",
                               })}

@@ -52,15 +52,15 @@ function GenerationStatusBanner({
               : "Your lesson is being prepared and will be saved to your account."}
           </p>
         </div>
-        {showProgressBar && (
+        {(showProgressBar && !showIndeterminate) && (
           <div className="w-full space-y-1">
-            <div className="h-2 w-full bg-[var(--border)] rounded-full overflow-hidden">
+            <div className="h-3 w-full bg-[var(--border)] rounded-full overflow-hidden">
               <div
                 className="h-full bg-[var(--primary)] rounded-full transition-all duration-500"
-                style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
+                style={{ width: `${Math.min(100, Math.max(2, progress ?? 0))}%` }}
               />
             </div>
-            <p className="text-xs text-[var(--muted-foreground)]">{progress}%</p>
+            <p className="text-xs text-[var(--muted-foreground)]">{Math.round(progress ?? 0)}%</p>
           </div>
         )}
         {showIndeterminate && (
@@ -194,6 +194,7 @@ export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLes
   );
 
   const generateAudioVisual = useCallback(async (mode: "podcast" | "slides", lessonId?: string | null, voiceId?: string | null) => {
+    const label = mode === "podcast" ? "podcast" : "slide deck";
     setState((s) => ({
       ...s,
       status: "loading",
@@ -201,13 +202,16 @@ export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLes
       audioVisual: null,
       podcastGenerating: true,
       generatingMode: mode,
-      generationProgress: 0,
-      generationStep: "Creating structure…",
+      generationProgress: 10,
+      generationStep: `Preparing ${label}…`,
     }));
     const steps: { progress: number; step: string }[] = [
-      { progress: 15, step: "Creating structure…" },
-      { progress: 40, step: mode === "podcast" ? "Generating audio…" : "Generating slides…" },
-      { progress: 70, step: "Finalizing…" },
+      { progress: 10, step: `Preparing ${label}…` },
+      { progress: 22, step: "Creating lesson structure…" },
+      { progress: 35, step: mode === "podcast" ? "Generating audio…" : "Generating slide images…" },
+      { progress: 50, step: mode === "podcast" ? "Synthesizing voice…" : "Rendering slides…" },
+      { progress: 65, step: "Almost there…" },
+      { progress: 80, step: "Finalizing…" },
     ];
     let stepIndex = 0;
     const advanceProgress = () => {
@@ -217,7 +221,7 @@ export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLes
         setState((s) => ({ ...s, generationProgress: progress, generationStep: step }));
       }
     };
-    const interval = setInterval(advanceProgress, 6000);
+    const interval = setInterval(advanceProgress, 1800);
     try {
       const res = await fetch("/api/generate-audio-visual", {
         method: "POST",
@@ -247,6 +251,12 @@ export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLes
         return;
       }
       if (data.success && data.lesson && data.assets) {
+        setState((s) => ({
+          ...s,
+          generationProgress: 100,
+          generationStep: "Done!",
+        }));
+        await new Promise((r) => setTimeout(r, 400));
         setState((s) => ({
           ...s,
           status: "ready",
@@ -394,8 +404,9 @@ export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLes
         <>
           {banner}
           <AudioVisualLoading
+            mode={state.generatingMode ?? "podcast"}
             step={state.generationStep ?? (state.generatingMode === "slides" ? "Generating slide deck…" : "Generating podcast…")}
-            progress={state.generationProgress ?? undefined}
+            progress={state.generationProgress ?? 0}
           />
         </>
       );
@@ -404,16 +415,11 @@ export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLes
       return (
         <>
           {banner}
-          <div className="flex min-h-[280px] flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] p-8">
-            <div className="animate-spin h-10 w-10 border-2 border-[var(--muted-foreground)] border-t-transparent rounded-full mb-4" aria-hidden />
-            <p className="text-[var(--muted-foreground)]">{statusMsg ?? "Loading…"}</p>
-            <div className="mt-4 w-full max-w-xs h-2 bg-[var(--border)] rounded-full overflow-hidden">
-              <div
-                className="h-full w-1/3 bg-[var(--primary)] rounded-full"
-                style={{ animation: "loading-shimmer 1.5s ease-in-out infinite" }}
-              />
-            </div>
-          </div>
+          <AudioVisualLoading
+            mode={state.loadingAudioVisualMode ?? "podcast"}
+            step="Loading…"
+            progress={0}
+          />
         </>
       );
     }
@@ -466,6 +472,51 @@ export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLes
           onRegenerateWithVoice={
             state.audioVisualMode === "podcast"
               ? (voiceId) => generateAudioVisual("podcast", state.lessonId, voiceId)
+              : undefined
+          }
+          onAddNarrator={
+            state.audioVisualMode === "slides" && state.lessonId
+              ? async () => {
+                  const res = await fetch(
+                    `/api/lessons/${state.lessonId}/audio-visual/add-narrator`,
+                    {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        voiceId: state.audioVisual?.voiceId ?? undefined,
+                      }),
+                    }
+                  );
+                  if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    throw new Error(
+                      (data as { error?: string }).error ?? `Request failed (${res.status})`
+                    );
+                  }
+                  const mode = "slides";
+                  const getRes = await fetch(
+                    `/api/lessons/${state.lessonId}/audio-visual?mode=${mode}`
+                  );
+                  if (!getRes.ok) throw new Error("Failed to reload slide deck");
+                  const data: {
+                    script?: string;
+                    slides?: SlideWithImage[];
+                    audioUrl?: string;
+                    voiceId?: string;
+                  } = await getRes.json();
+                  setState((s) =>
+                    s.audioVisual
+                      ? {
+                          ...s,
+                          audioVisual: {
+                            ...s.audioVisual,
+                            audioUrl: data.audioUrl ?? s.audioVisual.audioUrl,
+                            voiceId: data.voiceId ?? s.audioVisual.voiceId,
+                          },
+                        }
+                      : s
+                  );
+                }
               : undefined
           }
         />
@@ -523,7 +574,7 @@ export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLes
             </button>
           </div>
         </div>
-        {state.content && (
+        {state.content != null ? (
           <>
             {(state.fallbackUsed && state.fallbackUsed !== "none") && (
               <FallbackBanner
@@ -554,7 +605,7 @@ export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLes
               />
             )}
           </>
-        )}
+        ) : null}
         <div className="flex flex-wrap gap-3">
           <button
             type="button"

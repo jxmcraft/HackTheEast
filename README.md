@@ -36,6 +36,35 @@ Next.js 14 (App Router) + TypeScript + Tailwind CSS + Supabase. Syncs courses, c
 
 5. Open [http://localhost:3000](http://localhost:3000) and go to **Sync Dashboard** to verify the Canvas connection (courses, calendar events, assignments in tables).
 
+## Deploy to Vercel
+
+The project includes a `vercel.json` that configures the build to use **Bun** (`bun install`, `bun run build`).
+
+### Option A: Connect your Git repo (recommended)
+
+1. Push your code to **GitHub**, **GitLab**, or **Bitbucket**.
+2. Go to [vercel.com](https://vercel.com) → **Add New Project** → import your repo.
+3. Vercel will detect Next.js and use the settings from `vercel.json`. Click **Deploy**.
+4. In the project **Settings → Environment Variables**, add the same variables you use locally (from `.env.example`), e.g.:
+   - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY` (if you use background sync)
+   - Optional: `EMBEDDING_PROVIDER`, `OPENAI_EMBEDDING_API_KEY` (or MiniMax keys), `OPENAI_API_KEY` / `FEATHERLESS_API_KEY`, etc.
+5. Redeploy after adding env vars so they take effect.
+
+### Option B: Deploy from the CLI
+
+```bash
+bunx vercel login    # log in once
+bunx vercel          # deploy (prompts for project setup on first run)
+bunx vercel --prod   # deploy to production
+```
+
+Add environment variables in the [Vercel dashboard](https://vercel.com/dashboard) under your project → **Settings → Environment Variables**.
+
+### Embeddings on Vercel
+
+The default **local in-process** embedding model (all-MiniLM-L6-v2) can be heavy for serverless (cold starts, memory). For production on Vercel, consider setting **`EMBEDDING_PROVIDER=openai`** and **`OPENAI_EMBEDDING_API_KEY`** (and ensure your Supabase migration uses the matching vector dimensions, e.g. 1536 for `text-embedding-3-small`), or use MiniMax with `EMBEDDING_PROVIDER=minimax` and the corresponding keys.
+
 ## Create an example user
 
 This uses the Supabase **Service Role Key** (never expose this in the browser).

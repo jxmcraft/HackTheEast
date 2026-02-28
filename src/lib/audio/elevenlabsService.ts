@@ -4,7 +4,7 @@
  */
 
 import { ElevenLabsClient } from "elevenlabs";
-import { createClientOrThrow, createServiceRoleClient } from "@/utils/supabase/server";
+import { createServiceRoleClient } from "@/utils/supabase/server";
 
 const VOICE_RACHEL = "21m00Tcm4TlvDq8ikWAM";
 const MODEL_ID = "eleven_turbo_v2_5";

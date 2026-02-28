@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Image from "next/image";
 import type { SlideWithImage } from "@/types/audioVisual";
 import { isPlaceholderImage } from "@/lib/images/featherlessService";
 
@@ -34,6 +35,8 @@ export interface AudioVisualPlayerProps {
   script: string;
   voiceId?: string;
   onRegenerateWithVoice?: (voiceId: string) => void;
+  /** When slides have no audio, call this to generate narrator and refetch. Optional. */
+  onAddNarrator?: () => Promise<void>;
 }
 
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5];
@@ -56,12 +59,15 @@ export function AudioVisualPlayer({
   script,
   voiceId: initialVoiceId,
   onRegenerateWithVoice,
+  onAddNarrator,
 }: AudioVisualPlayerProps) {
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [audioLoadError, setAudioLoadError] = useState(false);
+  const [addingNarrator, setAddingNarrator] = useState(false);
+  const [addNarratorError, setAddNarratorError] = useState<string | null>(null);
   const voiceId = initialVoiceId ?? DEFAULT_VOICE_ID;
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -242,8 +248,33 @@ export function AudioVisualPlayer({
         <p className="text-gray-400 text-sm mb-4">
           {isPodcast
             ? "Audio could not be loaded or generated. Try “Regenerate podcast” below with a different voice if needed."
-            : "Audio not available for this lesson."}
+            : "Narrator audio is not available. Use “Add narrator audio” below, or regenerate the slide deck / convert to podcast for audio."}
         </p>
+      )}
+      {!isPodcast && !hasAudio && script.trim() && onAddNarrator && (
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={async () => {
+              setAddNarratorError(null);
+              setAddingNarrator(true);
+              try {
+                await onAddNarrator();
+              } catch (e) {
+                setAddNarratorError(e instanceof Error ? e.message : "Failed to add narrator");
+              } finally {
+                setAddingNarrator(false);
+              }
+            }}
+            disabled={addingNarrator}
+            className="rounded-lg bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white px-4 py-2 text-sm font-medium"
+          >
+            {addingNarrator ? "Adding narrator audio…" : "Add narrator audio"}
+          </button>
+          {addNarratorError && (
+            <p className="text-amber-400 text-sm mt-2">{addNarratorError}</p>
+          )}
+        </div>
       )}
 
       <div className="flex-1 overflow-y-auto min-h-0">
@@ -340,10 +371,12 @@ export function AudioVisualPlayer({
     <div className="flex flex-col lg:flex-row min-h-[70vh] bg-gray-900 rounded-xl border border-[var(--border)]">
       <div className="flex-1 relative bg-black min-h-[40vh] lg:min-h-0">
         {currentSlide?.imageUrl ? (
-          <img
+          <Image
             src={currentSlide.imageUrl}
             alt={currentSlide.title}
-            className="w-full h-full object-cover"
+            fill
+            className="object-cover"
+            unoptimized
           />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900" />
@@ -378,28 +411,29 @@ export function AudioVisualPlayer({
 export function AudioVisualLoading({
   step,
   progress,
-}: { step?: string | null; progress?: number | null } = {}) {
-  const showProgress = typeof progress === "number" && progress >= 0;
+  mode = "podcast",
+}: { step?: string | null; progress?: number | null; mode?: "podcast" | "slides" } = {}) {
+  const progressNum = typeof progress === "number" && progress >= 0 ? progress : 0;
+  const title = mode === "slides" ? "Generating slide deck" : "Generating podcast";
   return (
     <div className="flex min-h-[70vh] flex-col items-center justify-center bg-gray-900 rounded-xl border border-[var(--border)]">
-      <div className="text-center max-w-md w-full px-4">
+      <div className="text-center max-w-md w-full px-6 py-8">
         <div
-          className="animate-spin w-16 h-16 border-4 border-green-500 border-t-transparent rounded-full mx-auto mb-4"
+          className="animate-spin w-16 h-16 border-4 border-green-500 border-t-transparent rounded-full mx-auto mb-6"
           aria-hidden
         />
-        <p className="text-white text-xl">{step ?? "Generating your lesson…"}</p>
-        <p className="text-gray-400 mt-2">This may take a moment</p>
-        {showProgress && (
-          <div className="mt-6 w-full space-y-2">
-            <div className="h-2 w-full bg-gray-700 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-green-500 rounded-full transition-all duration-500"
-                style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
-              />
-            </div>
-            <p className="text-gray-400 text-sm">{progress}%</p>
+        <h2 className="text-white text-2xl font-semibold mb-1">{title}</h2>
+        <p className="text-gray-400 text-lg mb-6">{step ?? "Preparing…"}</p>
+        <div className="w-full space-y-2">
+          <div className="h-3 w-full bg-gray-700 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-green-500 rounded-full transition-all duration-500"
+              style={{ width: `${Math.min(100, Math.max(2, progressNum))}%` }}
+            />
           </div>
-        )}
+          <p className="text-gray-400 text-sm font-medium">{Math.round(progressNum)}%</p>
+        </div>
+        <p className="text-gray-500 text-sm mt-4">This may take a minute. Do not close this page.</p>
       </div>
     </div>
   );

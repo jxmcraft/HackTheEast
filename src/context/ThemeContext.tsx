@@ -102,11 +102,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } catch {
       applyThemeToDocument(theme.colors);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount to restore theme from localStorage
   }, []);
 
   useEffect(() => {
     if (!customColors) applyThemeToDocument(theme.colors);
-  }, [theme, customColors]);
+  }, [theme.colors, customColors]);
 
   return (
     <ThemeContext.Provider

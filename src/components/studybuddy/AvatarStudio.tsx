@@ -7,6 +7,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import NextImage from "next/image";
 import { createAvatar } from "@dicebear/core";
 import { personas } from "@dicebear/collection";
 import { getUserData, saveUserData, type AvatarProfile, type UserProfile } from "@/lib/studybuddyStorage";
@@ -193,29 +194,31 @@ export function CustomAvatar({
       options.facialHair = [cfg.facialHair];
     }
     return createAvatar(personas, options).toDataUri();
-  }, [name, avatarConfig, size, cfg.body, cfg.clothingColor, cfg.eyes, cfg.facialHair, cfg.hair, cfg.hairColor, cfg.mouth, cfg.nose, cfg.skinColor]);
+  }, [name, size, cfg.body, cfg.clothingColor, cfg.eyes, cfg.facialHair, cfg.hair, cfg.hairColor, cfg.mouth, cfg.nose, cfg.skinColor]);
 
   if (cfg.avatarSource === "upload" && cfg.customImageUrl) {
     const filter = (cfg as Record<string, string>).customImageFilter ? { filter: (cfg as Record<string, string>).customImageFilter } : undefined;
     return (
-      <img
+      <NextImage
         src={cfg.customImageUrl}
         alt="Avatar"
         width={size}
         height={size}
         className="rounded-full object-cover"
         style={filter}
+        unoptimized
       />
     );
   }
 
   return (
-    <img
+    <NextImage
       src={dataUri}
       alt="Avatar"
       width={size}
       height={size}
       className="rounded-full object-cover"
+      unoptimized
     />
   );
 }
@@ -526,7 +529,14 @@ export default function AvatarStudio({
               {profilePage === "user" ? (
                 <div className="rounded-xl border border-gray-200 p-6 flex flex-col items-center justify-center bg-gray-50">
                   {userProfile.profilePicture ? (
-                    <img src={userProfile.profilePicture} alt="User profile" className="w-36 h-36 rounded-full object-cover" />
+                    <NextImage
+                      src={userProfile.profilePicture}
+                      alt="User profile"
+                      width={144}
+                      height={144}
+                      className="w-36 h-36 rounded-full object-cover"
+                      unoptimized
+                    />
                   ) : (
                     <div className="w-36 h-36 rounded-full bg-gray-200" />
                   )}
@@ -637,7 +647,14 @@ export default function AvatarStudio({
                 </div>
                 <div className="flex items-center gap-3">
                   {userProfile.profilePicture ? (
-                    <img src={userProfile.profilePicture} alt="Profile" className="w-12 h-12 rounded-full object-cover" />
+                    <NextImage
+                      src={userProfile.profilePicture}
+                      alt="Profile"
+                      width={48}
+                      height={48}
+                      className="w-12 h-12 rounded-full object-cover"
+                      unoptimized
+                    />
                   ) : (
                     <div className="w-12 h-12 rounded-full bg-gray-200" />
                   )}

@@ -173,7 +173,7 @@ function parseJsonFromResponse(content: string): Record<string, unknown> {
   }
 
   // 2) Try full trimmed content (after repairs) in case response is only the object.
-  let full = removeTrailingCommas(repairSingleQuotedKeys(repairUnquotedKeys(trimmed)));
+  const full = removeTrailingCommas(repairSingleQuotedKeys(repairUnquotedKeys(trimmed)));
   let parsed = tryParse(full);
   if (parsed) return parsed;
 

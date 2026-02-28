@@ -173,7 +173,7 @@ export default function VideoTeacher({
         }
       })
       .catch(() => {});
-  }, [scriptLoading, sentences.length, currentSentenceIndex, avatarConfig.voiceId]);
+  }, [scriptLoading, sentences, currentSentenceIndex, avatarConfig.voiceId]);
 
   // Fetch expanded script (with cache for consistency) and slides on mount
   useEffect(() => {

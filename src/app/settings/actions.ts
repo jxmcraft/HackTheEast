@@ -1,3 +1,5 @@
+"use server";
+
 import { revalidatePath } from "next/cache";
 import { createClientOrThrow } from "@/utils/supabase/server";
 import type { AvatarStyle } from "@/components/settings/AvatarCustomizer";
