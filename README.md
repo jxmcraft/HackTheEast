@@ -21,6 +21,8 @@ Next.js 14 (App Router) + TypeScript + Tailwind CSS + Supabase. Syncs courses, c
 
    In the [Supabase SQL Editor](https://supabase.com/dashboard/project/_/sql), run the contents of `supabase/schema.sql` to create `users`, `courses`, `assignments`, and `study_sessions` tables.
 
+   Then run `supabase/profiles.sql` to create the `profiles` table + RLS + the signup trigger.
+
 4. **Run the app**
 
    ```bash
@@ -28,6 +30,27 @@ Next.js 14 (App Router) + TypeScript + Tailwind CSS + Supabase. Syncs courses, c
    ```
 
    Open [http://localhost:3000](http://localhost:3000) and go to **Sync Dashboard** to verify the Canvas connection (courses, calendar events, assignments in tables).
+
+## Create an example user
+
+This uses the Supabase **Service Role Key** (never expose this in the browser).
+
+1. Set `SUPABASE_SERVICE_ROLE_KEY` in your shell (or a local env file you do not commit).
+2. Run:
+
+   ```bash
+   npm run create-example-user
+   ```
+
+Defaults:
+- email: `test@example.com`
+- password: `ChangeMe123!`
+- full name: `Test User`
+
+Override with:
+- `EXAMPLE_USER_EMAIL`
+- `EXAMPLE_USER_PASSWORD`
+- `EXAMPLE_USER_FULL_NAME`
 
 ## Project structure
 

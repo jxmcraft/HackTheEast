@@ -1,0 +1,1 @@
+This md is for AI to easily find scripts that are frequently used. Make sure after creating a script, update this MD. 
