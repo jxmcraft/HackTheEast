@@ -27,15 +27,24 @@ const styleGuidance: Record<string, string> = {
 };
 void styleGuidance; // reserved for future use in prompt
 
+const MEMORY_BLOCK = (ctx: string) => `
+
+IMPORTANT CONTEXT ABOUT THIS STUDENT:
+${ctx}
+
+Adjust your teaching: if they struggled before, explain more carefully; if they mastered something, don't over-teach basics.`;
+
 export async function generateTextLesson(params: {
   topic: string;
   context: string;
   materials: RetrievedMaterial[];
   userPreferences: UserPreferences;
+  studentContext?: string;
 }): Promise<TextLesson> {
-  const { topic, context, userPreferences } = params;
+  const { topic, context, userPreferences, studentContext } = params;
 
   const systemPrompt = `You are an expert tutor helping a student learn about: ${topic}
+${studentContext ? MEMORY_BLOCK(studentContext) : ""}
 
 Your teaching style should be: ${userPreferences.avatar_style}
 - If "strict": Be formal, precise, expect high standards.

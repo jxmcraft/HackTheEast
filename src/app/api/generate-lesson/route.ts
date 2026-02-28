@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClientOrThrow } from "@/utils/supabase/server";
 import { generateLessonWithFallback, getCourseUuid } from "@/lib/ai/lessonFallback";
+import { getContextualMemories, formatMemoriesForPrompt } from "@/lib/memory/context";
 import type { LearningMode } from "@/lib/ai/types";
 
 export const dynamic = "force-dynamic";
@@ -70,6 +71,9 @@ export async function POST(request: NextRequest) {
       avatar_name: prefs?.avatar_name ?? null,
     };
 
+    const memories = await getContextualMemories(supabase, user.id, 5);
+    const studentContext = memories.length > 0 ? formatMemoriesForPrompt(memories) : undefined;
+
     const result = await generateLessonWithFallback({
       topic,
       courseId,
@@ -77,6 +81,7 @@ export async function POST(request: NextRequest) {
       contextHint,
       mode,
       preferences,
+      studentContext,
     });
 
     if (!result.success) {

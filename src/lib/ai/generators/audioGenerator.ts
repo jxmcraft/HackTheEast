@@ -12,15 +12,23 @@ export type AudioLesson = {
   duration: number; // seconds, estimated
 };
 
+const MEMORY_BLOCK = (ctx: string) => `
+
+IMPORTANT CONTEXT ABOUT THIS STUDENT:
+${ctx}
+Adapt the script: if they struggled before, explain more; if they mastered basics, go further.`;
+
 export async function generateAudioLesson(params: {
   topic: string;
   context: string;
   materials: RetrievedMaterial[];
   userPreferences: UserPreferences;
+  studentContext?: string;
 }): Promise<AudioLesson> {
-  const { topic, context, userPreferences } = params;
+  const { topic, context, userPreferences, studentContext } = params;
 
   const systemPrompt = `Create a conversational, friendly podcast script about ${topic}.
+${studentContext ? MEMORY_BLOCK(studentContext) : ""}
 
 Style: ${userPreferences.avatar_style}
 

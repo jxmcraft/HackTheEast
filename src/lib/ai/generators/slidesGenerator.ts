@@ -18,15 +18,23 @@ export type SlidesLesson = {
   totalSlides: number;
 };
 
+const MEMORY_BLOCK = (ctx: string) => `
+
+IMPORTANT CONTEXT ABOUT THIS STUDENT:
+${ctx}
+Adjust your slides: if they struggled before, add clarity; if they mastered basics, go deeper.`;
+
 export async function generateSlidesLesson(params: {
   topic: string;
   context: string;
   materials: RetrievedMaterial[];
   userPreferences: UserPreferences;
+  studentContext?: string;
 }): Promise<SlidesLesson> {
-  const { topic, context, userPreferences } = params;
+  const { topic, context, userPreferences, studentContext } = params;
 
   const systemPrompt = `You are a presentation designer creating educational slides.
+${studentContext ? MEMORY_BLOCK(studentContext) : ""}
 
 Teaching style: ${userPreferences.avatar_style}
 

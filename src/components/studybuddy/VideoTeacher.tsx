@@ -10,7 +10,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Play, Pause, SkipForward, SkipBack, Volume2, Settings, ArrowLeft, MessageCircle, BookOpen, X, Loader2, Maximize2, Minimize2, ChevronDown, ChevronUp, Bookmark, BookmarkCheck } from "lucide-react";
+import { Play, Pause, SkipForward, SkipBack, Volume2, Settings, ArrowLeft, MessageCircle, BookOpen, X, Loader2, Maximize2, Minimize2, ChevronDown, ChevronUp, Bookmark, BookmarkCheck, FileText } from "lucide-react";
 import LiveChat from "./LiveChat";
 import PracticeQuestion from "./PracticeQuestion";
 import TalkingAvatar from "./TalkingAvatar";
@@ -61,6 +61,12 @@ interface VideoTeacherProps {
   pdfId?: string;
   /** Topic from a dashboard lesson (Practice in StudyBuddy link) for chat context */
   lessonTopicFromDashboard?: string;
+  /** Course materials (PDF lectures / files) pulled from Canvas for this topic — shown under My materials */
+  courseMaterialsSources?: { title: string; url?: string; content_type?: string }[];
+  courseMaterialsLoading?: boolean;
+  showCourseMaterialsSection?: boolean;
+  courseMaterialsFetched?: boolean;
+  hasLessonCourseId?: boolean;
   onComplete?: () => void;
   onBack?: () => void;
 }
@@ -75,6 +81,11 @@ export default function VideoTeacher({
   sourceType = "neural_networks",
   pdfId,
   lessonTopicFromDashboard,
+  courseMaterialsSources = [],
+  courseMaterialsLoading = false,
+  showCourseMaterialsSection = false,
+  courseMaterialsFetched = false,
+  hasLessonCourseId = false,
   onComplete,
   onBack,
 }: VideoTeacherProps) {
@@ -888,7 +899,7 @@ export default function VideoTeacher({
             Practice
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
           {sidebarMode === "chat" ? (
             <LiveChat
               topic={topic}
@@ -907,6 +918,49 @@ export default function VideoTeacher({
               topic={topic}
               personalityPrompt={personalityPrompt}
             />
+          )}
+          {showCourseMaterialsSection && (
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/10 p-3 mt-2">
+              <div className="flex items-center gap-2 mb-2">
+                <FileText className="w-4 h-4 text-[var(--color-primary)] shrink-0" />
+                <h3 className="text-sm font-semibold text-[var(--foreground)]">Files used for this lesson</h3>
+              </div>
+              <p className="text-xs text-[var(--muted-foreground)] mb-2">
+                Course materials from your Canvas course used for this topic (differs per course):
+              </p>
+              {!hasLessonCourseId && (
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  Open a lesson from your dashboard and click &quot;Practice in StudyBuddy&quot; to load and list the course files here.
+                </p>
+              )}
+              {hasLessonCourseId && courseMaterialsLoading && !courseMaterialsFetched && (
+                <p className="text-xs text-[var(--muted-foreground)]">Loading…</p>
+              )}
+              {hasLessonCourseId && !courseMaterialsLoading && courseMaterialsFetched && courseMaterialsSources.length === 0 && (
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  No course materials found for this topic. Sync and ingest your course from the dashboard to see files here.
+                </p>
+              )}
+              {courseMaterialsSources.length > 0 && (
+                <ul className="space-y-1.5 text-xs">
+                  {courseMaterialsSources.map((src, i) => (
+                    <li key={`${src.title}-${i}`} className="flex items-start gap-2">
+                      <FileText className="w-3.5 h-3.5 text-[var(--muted-foreground)] shrink-0 mt-0.5" />
+                      {src.url ? (
+                        <a href={src.url} target="_blank" rel="noopener noreferrer" className="text-[var(--color-primary)] hover:underline truncate">
+                          {src.title}
+                        </a>
+                      ) : (
+                        <span className="text-[var(--foreground)] truncate">{src.title}</span>
+                      )}
+                      {src.content_type && (
+                        <span className="shrink-0 text-[var(--muted-foreground)]">({src.content_type})</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
         </div>
       </div>

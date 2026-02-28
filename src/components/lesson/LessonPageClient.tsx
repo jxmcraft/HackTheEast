@@ -87,6 +87,11 @@ export function LessonPageClient({
           meta: { progress: value },
         }),
       });
+      await fetch("/api/lesson-complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lessonId, progress: value }),
+      });
       setProgress(value);
     } catch {
       // ignore
@@ -104,7 +109,7 @@ export function LessonPageClient({
           <span className="text-[var(--foreground)]">{topic}</span>
           <span className="ml-auto">
             <Link
-              href={`/studybuddy?fromLesson=1&topic=${encodeURIComponent(topic)}`}
+              href={`/studybuddy?fromLesson=1&topic=${encodeURIComponent(topic)}&courseId=${encodeURIComponent(courseId)}`}
               className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-sm font-medium hover:bg-[var(--muted)]"
             >
               <BookOpen className="h-4 w-4" />
@@ -164,7 +169,7 @@ export function LessonPageClient({
                     Test your understanding
                   </button>
                   <Link
-                    href={`/studybuddy?fromLesson=1&topic=${encodeURIComponent(topic)}`}
+                    href={`/studybuddy?fromLesson=1&topic=${encodeURIComponent(topic)}&courseId=${encodeURIComponent(courseId)}`}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-[var(--muted)]"
                   >
                     <BookOpen className="h-4 w-4" />
