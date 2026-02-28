@@ -65,7 +65,7 @@ Reply with a single line: comma-separated 0-based indices to KEEP (e.g. 0,2,5). 
           .map((s) => parseInt(s.trim(), 10))
           .filter((n) => Number.isInteger(n) && n >= 0 && n < batch.length)
       );
-      for (const idx of indices) {
+      for (const idx of Array.from(indices)) {
         results.push(batch[idx]);
       }
     } catch {

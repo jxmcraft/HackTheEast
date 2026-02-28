@@ -386,7 +386,7 @@ async function generateMockResponse(
   userMessage: string,
   topic: string,
   section: string,
-  personalityPrompt: string
+  _personalityPrompt: string
 ): Promise<string> {
   // Simulate API delay
   await new Promise((resolve) => setTimeout(resolve, 800));

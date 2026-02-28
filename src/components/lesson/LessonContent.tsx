@@ -574,7 +574,7 @@ export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLes
             </button>
           </div>
         </div>
-        {state.content && (
+        {state.content != null ? (
           <>
             {(state.fallbackUsed && state.fallbackUsed !== "none") && (
               <FallbackBanner
@@ -605,7 +605,7 @@ export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLes
               />
             )}
           </>
-        )}
+        ) : null}
         <div className="flex flex-wrap gap-3">
           <button
             type="button"

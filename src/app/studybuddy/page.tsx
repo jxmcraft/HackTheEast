@@ -21,8 +21,8 @@ type PageState = "setup" | "content-selection" | "lesson";
 
 export default function StudyBuddyPage() {
   const [pageState, setPageState] = useState<PageState>("setup");
-  const [currentSectionId, setCurrentSectionId] = useState("__lesson_topic__");
-  const [currentSourceType, setCurrentSourceType] = useState<"lesson_topic">("lesson_topic");
+  const [_currentSectionId, setCurrentSectionId] = useState("__lesson_topic__");
+  const [_currentSourceType, setCurrentSourceType] = useState<"lesson_topic">("lesson_topic");
   const [lessonTopicOnlyMode, setLessonTopicOnlyMode] = useState<string | null>(null);
   const [lessonCourseId, setLessonCourseId] = useState<string | null>(null);
   const [canvasMaterialsContent, setCanvasMaterialsContent] = useState<string>("");
@@ -250,7 +250,7 @@ export default function StudyBuddyPage() {
     setPageState("content-selection");
   };
 
-  const handleSelectSection = (sectionId: string) => {
+  const _handleSelectSection = (sectionId: string) => {
     setCurrentSectionId(sectionId);
     setCurrentSourceType("lesson_topic");
     updateLastSection(currentTopic, sectionId);
