@@ -14,6 +14,10 @@ yarn-error.log*
 pnpm-debug.log*
 *.log
 
+# bun
+!bun.lock
+!bun.lockb
+
 # env files (keep example)
 .env
 .env.*.local

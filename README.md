@@ -7,7 +7,7 @@ Next.js 14 (App Router) + TypeScript + Tailwind CSS + Supabase. Syncs courses, c
 1. **Install dependencies**
 
    ```bash
-   npm install
+   bun install
    ```
 
 2. **Environment variables**
@@ -24,7 +24,7 @@ Next.js 14 (App Router) + TypeScript + Tailwind CSS + Supabase. Syncs courses, c
 4. **Run the app**
 
    ```bash
-   npm run dev
+   bun dev
    ```
 
    Open [http://localhost:3000](http://localhost:3000) and go to **Sync Dashboard** to verify the Canvas connection (courses, calendar events, assignments in tables).
@@ -40,7 +40,21 @@ Next.js 14 (App Router) + TypeScript + Tailwind CSS + Supabase. Syncs courses, c
 
 ## Scripts
 
-- `npm run dev` – Start dev server
-- `npm run build` – Production build
-- `npm run start` – Start production server
-- `npm run lint` – Run ESLint
+- `bun dev` – Start dev server
+- `bun build` – Production build
+- `bun start` – Start production server
+- `bun lint` – Run ESLint
+
+## How to run with Bun
+
+```bash
+# Install dependencies (generates bun.lock)
+bun install
+
+# Dev
+bun dev
+
+# Build / Run
+bun build
+bun start
+```
