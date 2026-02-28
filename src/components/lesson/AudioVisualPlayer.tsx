@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Image from "next/image";
 import type { SlideWithImage } from "@/types/audioVisual";
 import { isPlaceholderImage } from "@/lib/images/featherlessService";
 
@@ -370,10 +371,12 @@ export function AudioVisualPlayer({
     <div className="flex flex-col lg:flex-row min-h-[70vh] bg-gray-900 rounded-xl border border-[var(--border)]">
       <div className="flex-1 relative bg-black min-h-[40vh] lg:min-h-0">
         {currentSlide?.imageUrl ? (
-          <img
+          <Image
             src={currentSlide.imageUrl}
             alt={currentSlide.title}
-            className="w-full h-full object-cover"
+            fill
+            className="object-cover"
+            unoptimized
           />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900" />

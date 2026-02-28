@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   BookOpen,
-  Brain,
   CalendarDays,
   ChevronDown,
   ChevronLeft,
@@ -345,6 +344,7 @@ export default function SyncDashboardPage() {
       })
       .catch(() => {});
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount to resume polling; pollSyncStatus omitted to avoid re-running when callbacks change
   }, []);
 
   const syncAll = async () => {
