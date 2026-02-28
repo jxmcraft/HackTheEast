@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/utils/supabase/server";
 import { createClientOrThrow } from "@/utils/supabase/server";
 import { getCanvasCredentialsFromProfile } from "@/lib/canvas-credentials";
-import { CanvasAPIClient } from "@/lib/canvas/ingest";
-import { ingestCourseMaterials } from "@/lib/canvas/ingest";
+import { CanvasAPIClient, ingestCourseMaterials } from "@/lib/canvas/ingest";
 import { storeCourseMaterials } from "@/lib/canvas/store";
+import { makeUploadCourseFile } from "@/lib/canvas/uploadStorage";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -110,7 +110,9 @@ export async function POST(request: NextRequest) {
       courseUuid = inserted.id;
     }
 
-    const materials = await ingestCourseMaterials(courseId, accessToken, baseUrl);
+    const materials = await ingestCourseMaterials(courseId, accessToken, baseUrl, {
+      uploadFile: makeUploadCourseFile(supabase, courseUuid),
+    });
     const { materialsStored, chunksCreated } = await storeCourseMaterials(courseUuid, materials);
 
     return NextResponse.json({

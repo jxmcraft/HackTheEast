@@ -19,6 +19,7 @@ import {
   getResumeCourseIndex,
 } from "@/lib/sync-progress-db";
 import type { CanvasCourse, CanvasAssignment } from "@/lib/canvas";
+import { makeUploadCourseFile } from "@/lib/canvas/uploadStorage";
 import { getServiceRoleEnv } from "@/utils/supabase/env";
 
 export const dynamic = "force-dynamic";
@@ -211,6 +212,7 @@ export async function POST() {
                 credentialsCopy.token!,
                 credentialsCopy.baseUrl!,
                 {
+                  uploadFile: makeUploadCourseFile(serviceSupabase, courseUuid),
                   onItemRead: (msg, idx, total) => {
                     void updateSyncProgress(serviceSupabase, user.id, {
                       message: `Ingesting ${c.name}: ${msg} (${idx + 1}/${total})`,
@@ -307,6 +309,7 @@ export async function POST() {
           credentials.token!,
           credentials.baseUrl!,
           {
+            uploadFile: makeUploadCourseFile(supabase, courseUuid),
             onItemRead: (msg, idx, total) => {
               void updateSyncProgress(supabase, user.id, {
                 message: `Ingesting ${c.name}: ${msg} (${idx + 1}/${total})`,

@@ -1,6 +1,7 @@
 /**
- * Extract text from PDF and PPTX for agent memory.
+ * Extract text from PDF, PPTX, and DOCX for agent memory.
  * Used for linked documents and Canvas file items.
+ * Returns extracted text and the original buffer so callers can store the file binary.
  * pdf-parse (and pdfjs-dist) are loaded only when parsing a PDF to avoid
  * "Object.defineProperty called on non-object" in Next.js server webpack context.
  */
@@ -10,11 +11,16 @@ import JSZip from "jszip";
 const FETCH_TIMEOUT_MS = 15_000;
 const MAX_PDF_SIZE = 50 * 1024 * 1024; // 50 MB
 const MAX_PPTX_SIZE = 30 * 1024 * 1024; // 30 MB
+const MAX_DOCX_SIZE = 20 * 1024 * 1024; // 20 MB
 
 export type DocumentResult = {
   url: string;
   title: string;
   text: string;
+  /** Original file buffer for storing in Supabase Storage. */
+  buffer: Buffer;
+  /** MIME type, e.g. application/pdf. */
+  contentType: string;
 };
 
 function isPdfUrl(url: string): boolean {
@@ -30,6 +36,15 @@ function isPptxUrl(url: string): boolean {
   try {
     const path = new URL(url).pathname.toLowerCase();
     return path.endsWith(".pptx");
+  } catch {
+    return false;
+  }
+}
+
+function isDocxUrl(url: string): boolean {
+  try {
+    const path = new URL(url).pathname.toLowerCase();
+    return path.endsWith(".docx");
   } catch {
     return false;
   }
@@ -75,8 +90,21 @@ export async function extractTextFromPptxBuffer(buffer: Buffer): Promise<string 
   }
 }
 
+/** Extract text from DOCX using mammoth. */
+export async function extractTextFromDocxBuffer(buffer: Buffer): Promise<string | null> {
+  try {
+    const mammoth = await import("mammoth");
+    const result = await mammoth.default.extractRawText({ buffer });
+    const text = (result?.value ?? "").trim().replace(/\s+/g, " ");
+    return text.length >= 20 ? text : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Fetch a URL and extract text if it's PDF or PPTX.
+ * Fetch a URL and extract text if it's PDF, PPTX, or DOCX.
+ * Returns the original buffer and contentType so callers can store the file binary.
  * Optional headers (e.g. Authorization) for Canvas file URLs.
  */
 export async function fetchAndExtractDocument(
@@ -94,26 +122,57 @@ export async function fetchAndExtractDocument(
     });
     clearTimeout(timeout);
     if (!res.ok) return null;
-    const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
-    const isPdf =
-      contentType.includes("application/pdf") || isPdfUrl(url);
-    const isPptx =
-      contentType.includes("application/vnd.openxmlformats-officedocument.presentationml") ||
-      contentType.includes("application/vnd.ms-powerpoint") ||
-      isPptxUrl(url);
+    const contentTypeHeader = (res.headers.get("content-type") ?? "").toLowerCase();
     const buf = Buffer.from(await res.arrayBuffer());
+    const title = url.split("/").filter(Boolean).pop() ?? url;
+    const sliceTitle = (t: string) => t.slice(0, 500);
+
+    const isPdf =
+      contentTypeHeader.includes("application/pdf") || isPdfUrl(url);
+    const isPptx =
+      contentTypeHeader.includes("application/vnd.openxmlformats-officedocument.presentationml") ||
+      contentTypeHeader.includes("application/vnd.ms-powerpoint") ||
+      isPptxUrl(url);
+    const isDocx =
+      contentTypeHeader.includes("application/vnd.openxmlformats-officedocument.wordprocessingml") ||
+      isDocxUrl(url);
+
     if (isPdf && buf.length <= MAX_PDF_SIZE) {
       const text = await extractTextFromPdfBuffer(buf);
       if (text) {
-        const title = url.split("/").filter(Boolean).pop() ?? url;
-        return { url, title: title.slice(0, 500), text: text.slice(0, 150_000) };
+        return {
+          url,
+          title: sliceTitle(title),
+          text: text.slice(0, 150_000),
+          buffer: buf,
+          contentType: "application/pdf",
+        };
       }
     }
     if (isPptx && buf.length <= MAX_PPTX_SIZE) {
       const text = await extractTextFromPptxBuffer(buf);
       if (text) {
-        const title = url.split("/").filter(Boolean).pop() ?? url;
-        return { url, title: title.slice(0, 500), text: text.slice(0, 150_000) };
+        return {
+          url,
+          title: sliceTitle(title),
+          text: text.slice(0, 150_000),
+          buffer: buf,
+          contentType:
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        };
+      }
+    }
+    if (isDocx && buf.length <= MAX_DOCX_SIZE) {
+      const text = await extractTextFromDocxBuffer(buf);
+      if (text) {
+        return {
+          url,
+          title: sliceTitle(title),
+          text: text.slice(0, 150_000),
+          buffer: buf,
+          contentType:
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        };
       }
     }
     return null;

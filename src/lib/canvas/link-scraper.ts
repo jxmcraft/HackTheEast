@@ -1,6 +1,8 @@
 /**
  * Extract links from Canvas pages and recursively fetch linked web pages for course materials.
- * Also fetches PDF and PPTX links and extracts text for agent memory.
+ * - Canvas page links: resolved via Canvas API when resolveCanvasPage is provided.
+ * - File links (PDF, DOCX, PPTX): downloaded and extracted; buffer returned for storage.
+ * - Other URLs: fetched as HTML and text extracted.
  */
 
 import { fetchAndExtractDocument } from "./document-extractor";
@@ -14,7 +16,39 @@ export type LinkedPageResult = {
   url: string;
   title: string;
   text: string;
+  rawHtml?: string;
+  /** When this result came from a document (PDF/DOCX/PPTX), the original file buffer for storage. */
+  fileBinary?: Buffer;
+  fileContentType?: string;
+  fileFileName?: string;
 };
+
+/** Return true if the URL looks like a document we can download and extract. */
+export function isDocumentUrl(url: string): boolean {
+  try {
+    const path = new URL(url).pathname.toLowerCase();
+    return /\.(pdf|docx|pptx)(\?|$)/i.test(path);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Parse a URL that points to a Canvas course page (e.g. .../courses/123/pages/lecture-notes).
+ * Returns { courseId, pageSlug } or null if not a Canvas page URL.
+ */
+export function parseCanvasPageUrl(url: string, baseUrl: string): { courseId: string; pageSlug: string } | null {
+  try {
+    const u = new URL(url);
+    const base = new URL(baseUrl);
+    if (u.origin !== base.origin) return null;
+    const match = u.pathname.match(/\/courses\/(\d+)\/pages\/([^/?#]+)/i);
+    if (!match) return null;
+    return { courseId: match[1], pageSlug: decodeURIComponent(match[2]) };
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Extract absolute http(s) URLs from HTML (e.g. Canvas page body or assignment description).
@@ -96,13 +130,17 @@ function extractTitleFromHTML(html: string): string | null {
 }
 
 /**
- * Recursively crawl links: fetch each URL, extract text and nested links, up to maxDepth and maxPages.
+ * Recursively crawl links: resolve Canvas pages via API, download document links (PDF/DOCX/PPTX), else fetch HTML.
  */
 export async function crawlLinkedPages(
   startUrls: string[],
   options: {
     maxPages?: number;
     maxDepth?: number;
+    /** If provided, called first for each URL; when it returns a result, that URL is treated as a Canvas page and not fetched directly. */
+    resolveCanvasPage?: (url: string) => Promise<LinkedPageResult | null>;
+    /** Optional extra headers for document fetches (e.g. Authorization for Canvas file URLs). */
+    documentHeaders?: Record<string, string>;
   } = {}
 ): Promise<LinkedPageResult[]> {
   const maxPages = Math.min(options.maxPages ?? MAX_LINKED_PAGES_PER_SOURCE, 50);
@@ -119,16 +157,54 @@ export async function crawlLinkedPages(
     if (visited.has(normalized)) continue;
     visited.add(normalized);
 
-    let page: LinkedPageResult | null = await fetchPageText(url);
+    let page: LinkedPageResult | null = null;
+
+    if (options.resolveCanvasPage) {
+      page = await options.resolveCanvasPage(url);
+    }
+    if (!page && isDocumentUrl(url)) {
+      const doc = await fetchAndExtractDocument(url, { headers: options.documentHeaders });
+      if (doc) {
+        const fileName = url.split("/").filter(Boolean).pop()?.replace(/\?.*$/, "") ?? "document";
+        page = {
+          url: doc.url,
+          title: doc.title,
+          text: doc.text,
+          fileBinary: doc.buffer,
+          fileContentType: doc.contentType,
+          fileFileName: fileName,
+        };
+      }
+    }
     if (!page) {
-      const doc = await fetchAndExtractDocument(url);
-      if (doc) page = { url: doc.url, title: doc.title, text: doc.text };
+      page = await fetchPageText(url);
+    }
+    if (!page) {
+      const doc = await fetchAndExtractDocument(url, { headers: options.documentHeaders });
+      if (doc) {
+        const fileName = url.split("/").filter(Boolean).pop()?.replace(/\?.*$/, "") ?? "document";
+        page = {
+          url: doc.url,
+          title: doc.title,
+          text: doc.text,
+          fileBinary: doc.buffer,
+          fileContentType: doc.contentType,
+          fileFileName: fileName,
+        };
+      }
     }
     if (!page) continue;
-    results.push({ url: page.url, title: page.title, text: page.text });
+    results.push({
+      url: page.url,
+      title: page.title,
+      text: page.text,
+      fileBinary: page.fileBinary,
+      fileContentType: page.fileContentType,
+      fileFileName: page.fileFileName,
+    });
 
     if (depth >= maxDepth) continue;
-    const htmlForLinks = "rawHtml" in page && page.rawHtml ? page.rawHtml : "";
+    const htmlForLinks = page.rawHtml ?? "";
     const nestedLinks = extractLinksFromHTML(String(htmlForLinks), String(page.url ?? ""));
     const toEnqueue = nestedLinks
       .filter((u) => {

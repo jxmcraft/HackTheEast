@@ -7,7 +7,7 @@
  */
 
 import { createHash } from "crypto";
-import { extractLinksFromHTML, crawlLinkedPages } from "./link-scraper";
+import { extractLinksFromHTML, crawlLinkedPages, parseCanvasPageUrl } from "./link-scraper";
 import { fetchAndExtractDocument } from "./document-extractor";
 
 export type IngestedMaterial = {
@@ -228,6 +228,11 @@ function linkedPageCanvasId(courseId: string, url: string): string {
  * Optional onItemRead(message, itemIndex, itemTotal) is called for each item read (front page, page, file, assignment) so the UI can show progress.
  * Optional onMaterialIngested(material) is called after each material is added; if provided and async, ingest waits for it so you can store each material immediately.
  */
+/** Upload a file buffer to Supabase Storage and return the storage path. Called with the current course context (caller binds course UUID). */
+export type UploadCourseFileFn = (
+  params: { canvasItemId: string; buffer: Buffer; fileName: string; contentType: string }
+) => Promise<string>;
+
 export async function ingestCourseMaterials(
   courseId: string,
   accessToken: string,
@@ -235,11 +240,31 @@ export async function ingestCourseMaterials(
   options?: {
     onItemRead?: (message: string, itemIndex: number, itemTotal: number) => void;
     onMaterialIngested?: (material: IngestedMaterial) => void | Promise<void>;
+    /** When provided, file binaries (Canvas files and linked PDF/DOCX/PPTX) are uploaded and path stored in metadata. */
+    uploadFile?: UploadCourseFileFn;
   }
 ): Promise<IngestedMaterial[]> {
   const client = new CanvasAPIClient(baseUrl, accessToken);
   const materials: IngestedMaterial[] = [];
   const seenIds = new Set<string>();
+
+  const resolveCanvasPage = async (url: string): Promise<{ url: string; title: string; text: string; rawHtml?: string } | null> => {
+    const parsed = parseCanvasPageUrl(url, baseUrl);
+    if (!parsed) return null;
+    try {
+      const page = await client.getPage(parsed.courseId, parsed.pageSlug);
+      const text = extractTextFromHTML(page.body ?? "");
+      if (!text || text.length < 20) return null;
+      return {
+        url,
+        title: page.title ?? parsed.pageSlug,
+        text,
+        rawHtml: page.body ?? undefined,
+      };
+    } catch {
+      return null;
+    }
+  };
 
   async function addMaterial(
     canvas_item_id: string,
@@ -309,20 +334,34 @@ export async function ingestCourseMaterials(
       const frontLinks = extractLinksFromHTML(frontPage.body, baseUrl);
       if (frontLinks.length > 0) {
         try {
-          const linkedPages = await crawlLinkedPages(frontLinks, { maxPages: 25, maxDepth: 2 });
+          const linkedPages = await crawlLinkedPages(frontLinks, {
+            maxPages: 25,
+            maxDepth: 2,
+            resolveCanvasPage,
+            documentHeaders: { Authorization: `Bearer ${accessToken}` },
+          });
           for (const lp of linkedPages) {
-            await addMaterial(
-              linkedPageCanvasId(courseId, lp.url),
-              "page",
-              lp.text,
-              {
-                title: lp.title,
-                url: lp.url,
-                source: "linked",
-                source_canvas_item_id: `front-page-${courseId}-${frontPage.page_id ?? "front"}`,
-                module_name: "Front page",
+            let meta: IngestedMaterial["metadata"] = {
+              title: lp.title,
+              url: lp.url,
+              source: "linked",
+              source_canvas_item_id: `front-page-${courseId}-${frontPage.page_id ?? "front"}`,
+              module_name: "Front page",
+            };
+            if (lp.fileBinary && options?.uploadFile && lp.fileFileName && lp.fileContentType) {
+              try {
+                const storagePath = await options.uploadFile({
+                  canvasItemId: linkedPageCanvasId(courseId, lp.url),
+                  buffer: lp.fileBinary,
+                  fileName: lp.fileFileName,
+                  contentType: lp.fileContentType,
+                });
+                meta = { ...meta, file_storage_path: storagePath, file_name: lp.fileFileName, file_content_type: lp.fileContentType };
+              } catch (e) {
+                console.warn("Upload linked file failed:", e instanceof Error ? e.message : e);
               }
-            );
+            }
+            await addMaterial(linkedPageCanvasId(courseId, lp.url), "page", lp.text, meta);
           }
         } catch (linkErr) {
           console.warn("Link crawl failed for front page:", linkErr instanceof Error ? linkErr.message : linkErr);
@@ -375,20 +414,31 @@ export async function ingestCourseMaterials(
               const linkedPages = await crawlLinkedPages(pageLinks, {
                 maxPages: 25,
                 maxDepth: 2,
+                resolveCanvasPage,
+                documentHeaders: { Authorization: `Bearer ${accessToken}` },
               });
               for (const lp of linkedPages) {
-                await addMaterial(
-                  linkedPageCanvasId(courseId, lp.url),
-                  "page",
-                  lp.text,
-                  {
-                    title: lp.title,
-                    url: lp.url,
-                    source: "linked",
-                    source_canvas_item_id: `page-${courseId}-${page.page_id ?? pageId}`,
-                    module_name: baseMeta.module_name,
+                let meta: IngestedMaterial["metadata"] = {
+                  title: lp.title,
+                  url: lp.url,
+                  source: "linked",
+                  source_canvas_item_id: `page-${courseId}-${page.page_id ?? pageId}`,
+                  module_name: baseMeta.module_name,
+                };
+                if (lp.fileBinary && options?.uploadFile && lp.fileFileName && lp.fileContentType) {
+                  try {
+                    const storagePath = await options.uploadFile({
+                      canvasItemId: linkedPageCanvasId(courseId, lp.url),
+                      buffer: lp.fileBinary,
+                      fileName: lp.fileFileName,
+                      contentType: lp.fileContentType,
+                    });
+                    meta = { ...meta, file_storage_path: storagePath, file_name: lp.fileFileName, file_content_type: lp.fileContentType };
+                  } catch (e) {
+                    console.warn("Upload linked file failed:", e instanceof Error ? e.message : e);
                   }
-                );
+                }
+                await addMaterial(linkedPageCanvasId(courseId, lp.url), "page", lp.text, meta);
               }
             } catch (linkErr) {
               console.warn(
@@ -423,20 +473,31 @@ export async function ingestCourseMaterials(
               const linkedPages = await crawlLinkedPages(descLinks, {
                 maxPages: 25,
                 maxDepth: 2,
+                resolveCanvasPage,
+                documentHeaders: { Authorization: `Bearer ${accessToken}` },
               });
               for (const lp of linkedPages) {
-                await addMaterial(
-                  linkedPageCanvasId(courseId, lp.url),
-                  "page",
-                  lp.text,
-                  {
-                    title: lp.title,
-                    url: lp.url,
-                    source: "linked",
-                    source_canvas_item_id: `assignment-${courseId}-${assignment.id}`,
-                    module_name: baseMeta.module_name,
+                let meta: IngestedMaterial["metadata"] = {
+                  title: lp.title,
+                  url: lp.url,
+                  source: "linked",
+                  source_canvas_item_id: `assignment-${courseId}-${assignment.id}`,
+                  module_name: baseMeta.module_name,
+                };
+                if (lp.fileBinary && options?.uploadFile && lp.fileFileName && lp.fileContentType) {
+                  try {
+                    const storagePath = await options.uploadFile({
+                      canvasItemId: linkedPageCanvasId(courseId, lp.url),
+                      buffer: lp.fileBinary,
+                      fileName: lp.fileFileName,
+                      contentType: lp.fileContentType,
+                    });
+                    meta = { ...meta, file_storage_path: storagePath, file_name: lp.fileFileName, file_content_type: lp.fileContentType };
+                  } catch (e) {
+                    console.warn("Upload linked file failed:", e instanceof Error ? e.message : e);
                   }
-                );
+                }
+                await addMaterial(linkedPageCanvasId(courseId, lp.url), "page", lp.text, meta);
               }
             } catch (linkErr) {
               console.warn(
@@ -451,35 +512,46 @@ export async function ingestCourseMaterials(
           report(`Reading file: ${title}`);
           const isPdf = /\.pdf$/i.test(file.filename ?? "") || /\.pdf$/i.test(file.url ?? "");
           const isPptx = /\.pptx$/i.test(file.filename ?? "") || /\.pptx$/i.test(file.url ?? "");
+          const isDocx = /\.docx$/i.test(file.filename ?? "") || /\.docx$/i.test(file.url ?? "");
           let contentText = title;
-          if ((isPdf || isPptx) && file.url) {
+          let fileMeta: IngestedMaterial["metadata"] = {
+            ...baseMeta,
+            title,
+            url: file.url,
+            created_at: file.created_at,
+            updated_at: file.updated_at,
+            source: "canvas",
+          };
+          if ((isPdf || isPptx || isDocx) && file.url) {
             try {
               const doc = await fetchAndExtractDocument(file.url, {
                 headers: { Authorization: `Bearer ${accessToken}` },
               });
               if (doc?.text && doc.text.length >= 50) contentText = doc.text;
+              if (doc?.buffer && options?.uploadFile) {
+                const fileName = file.filename ?? file.display_name ?? title;
+                const storagePath = await options.uploadFile({
+                  canvasItemId: `file-${courseId}-${file.id}`,
+                  buffer: doc.buffer,
+                  fileName,
+                  contentType: doc.contentType,
+                });
+                fileMeta = {
+                  ...fileMeta,
+                  file_storage_path: storagePath,
+                  file_name: fileName,
+                  file_content_type: doc.contentType,
+                };
+              }
             } catch (e) {
-              console.warn(`Failed to extract PDF/PPTX for file ${file.id}:`, e instanceof Error ? e.message : e);
+              console.warn(`Failed to extract/upload file ${file.id}:`, e instanceof Error ? e.message : e);
             }
           }
-          // Only embed extracted text, never the file URL or raw file content
           const textToStore =
-            typeof contentText === "string" && !/^https?:\/\/[^\s]+\.(pdf|pptx)(\?|$)/i.test(contentText.trim())
+            typeof contentText === "string" && !/^https?:\/\/[^\s]+\.(pdf|pptx|docx)(\?|$)/i.test(contentText.trim())
               ? contentText
               : title;
-          await addMaterial(
-            `file-${courseId}-${file.id}`,
-            "file",
-            textToStore,
-            {
-              ...baseMeta,
-              title,
-              url: file.url,
-              created_at: file.created_at,
-              updated_at: file.updated_at,
-              source: "canvas",
-            }
-          );
+          await addMaterial(`file-${courseId}-${file.id}`, "file", textToStore, fileMeta);
         }
         // SubHeader, ExternalUrl, ExternalTool, Discussion, Quiz (without description fetch) skipped or treated as lecture placeholder
       } catch (err) {

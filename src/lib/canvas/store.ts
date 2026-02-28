@@ -92,6 +92,24 @@ export async function storeCourseMaterials(
       await deleteChunksForMaterial(supabase, courseId, material.canvas_item_id);
     }
 
+    const storagePath = material.metadata?.file_storage_path as string | undefined;
+    const fileName = (material.metadata?.file_name as string) ?? "file";
+    const contentType = (material.metadata?.file_content_type as string) ?? "application/octet-stream";
+    if (storagePath) {
+      const { error: fileErr } = await supabase.from("course_material_files").upsert(
+        {
+          course_id: courseId,
+          canvas_item_id: material.canvas_item_id,
+          file_name: fileName,
+          content_type: contentType,
+          storage_path: storagePath,
+          file_size: (material.metadata?.file_size as number) ?? null,
+        },
+        { onConflict: "course_id,canvas_item_id" }
+      );
+      if (fileErr) console.warn("Failed to upsert course_material_files:", fileErr.message);
+    }
+
     const chunks = chunkText(material.content_text);
     if (chunks.length === 0) continue;
 
