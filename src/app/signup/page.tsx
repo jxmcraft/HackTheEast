@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { signup } from "@/app/auth/actions";
 
-export default function SignupPage() {
+type Props = { searchParams: Promise<{ error?: string }> };
+
+export default async function SignupPage({ searchParams }: Props) {
+  const { error: errorParam } = await searchParams;
+  const error = typeof errorParam === "string" ? errorParam : null;
+
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-md space-y-6">
@@ -11,6 +16,15 @@ export default function SignupPage() {
             Sign up to start syncing Canvas and tracking your study sessions.
           </p>
         </header>
+
+        {error && (
+          <div
+            role="alert"
+            className="rounded-xl border border-red-500/50 bg-red-500/10 px-4 py-3 text-sm text-red-400"
+          >
+            {error}
+          </div>
+        )}
 
         <form
           action={signup}
