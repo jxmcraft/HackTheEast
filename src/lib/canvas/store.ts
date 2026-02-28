@@ -150,7 +150,12 @@ export async function storeCourseMaterials(
       });
 
       if (error) {
-        if (error.code === "23505") continue;
+        if (error.code === "23505") {
+          // Chunk already exists (e.g. from prior run that wrote rows but not hash). Count as success so we don't warn "No chunks saved".
+          chunksCreated++;
+          materialChunksCreated++;
+          continue;
+        }
         throw error;
       }
       chunksCreated++;
