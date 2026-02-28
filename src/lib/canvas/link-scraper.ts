@@ -35,6 +35,75 @@ export function isDocumentUrl(url: string): boolean {
   }
 }
 
+/** Return true if the URL looks like a Canvas file preview page (not the file itself). */
+export function isCanvasFilePreviewUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname;
+    if (!/\/courses\/\d+\/files\/\d+$/i.test(path)) return false;
+    return !/\.(pdf|docx|pptx)$/i.test(path);
+  } catch {
+    return false;
+  }
+}
+
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
+}
+
+/**
+ * For Canvas file preview pages (e.g. /courses/:courseId/files/:fileId?verifier=...&wrap=1),
+ * resolve to the underlying direct file download URL when possible.
+ */
+export async function resolveCanvasFilePreviewUrl(
+  url: string,
+  options?: { headers?: Record<string, string> }
+): Promise<string> {
+  if (!isCanvasFilePreviewUrl(url)) return url;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { "User-Agent": USER_AGENT, ...options?.headers },
+      redirect: "follow",
+      cache: "no-store",
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return url;
+
+    const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
+    if (!contentType.includes("text/html")) return res.url || url;
+
+    const html = await res.text();
+    const patterns = [
+      /href=["']([^"']*\/courses\/\d+\/files\/\d+\/download[^"']*)["']/i,
+      /href=["']([^"']*\/files\/\d+\/download[^"']*)["']/i,
+    ];
+    for (const pattern of patterns) {
+      const match = html.match(pattern);
+      if (!match?.[1]) continue;
+      const href = decodeHtmlEntities(match[1]);
+      try {
+        return new URL(href, res.url || url).toString();
+      } catch {
+        continue;
+      }
+    }
+
+    return url;
+  } catch {
+    clearTimeout(timeout);
+    return url;
+  }
+}
+
 /**
  * Parse a URL that points to a Canvas course page (e.g. .../courses/123/pages/lecture-notes).
  * Returns { courseId, pageSlug } or null if not a Canvas page URL.
@@ -155,21 +224,30 @@ export async function crawlLinkedPages(
 
   while (queue.length > 0 && results.length < maxPages) {
     const { url, depth } = queue.shift()!;
-    const normalized = url.replace(/#.*$/, "").replace(/\/$/, "");
-    if (visited.has(normalized)) continue;
-    visited.add(normalized);
+    const originalNormalized = url.replace(/#.*$/, "").replace(/\/$/, "");
+    if (visited.has(originalNormalized)) continue;
+    visited.add(originalNormalized);
+
+    const effectiveUrl = await resolveCanvasFilePreviewUrl(url, {
+      headers: options.documentHeaders,
+    });
+    const effectiveNormalized = effectiveUrl.replace(/#.*$/, "").replace(/\/$/, "");
+    if (effectiveNormalized !== originalNormalized) {
+      if (visited.has(effectiveNormalized)) continue;
+      visited.add(effectiveNormalized);
+    }
 
     let page: LinkedPageResult | null = null;
     let fromCanvasApi = false;
 
     if (options.resolveCanvasPage) {
-      page = await options.resolveCanvasPage(url);
+      page = await options.resolveCanvasPage(effectiveUrl);
       if (page) fromCanvasApi = true;
     }
-    if (!page && isDocumentUrl(url)) {
-      const doc = await fetchAndExtractDocument(url, { headers: options.documentHeaders });
+    if (!page && isDocumentUrl(effectiveUrl)) {
+      const doc = await fetchAndExtractDocument(effectiveUrl, { headers: options.documentHeaders });
       if (doc) {
-        const fileName = url.split("/").filter(Boolean).pop()?.replace(/\?.*$/, "") ?? "document";
+        const fileName = effectiveUrl.split("/").filter(Boolean).pop()?.replace(/\?.*$/, "") ?? "document";
         page = {
           url: doc.url,
           title: doc.title,
@@ -181,12 +259,12 @@ export async function crawlLinkedPages(
       }
     }
     if (!page) {
-      page = await fetchPageText(url);
+      page = await fetchPageText(effectiveUrl);
     }
     if (!page) {
-      const doc = await fetchAndExtractDocument(url, { headers: options.documentHeaders });
+      const doc = await fetchAndExtractDocument(effectiveUrl, { headers: options.documentHeaders });
       if (doc) {
-        const fileName = url.split("/").filter(Boolean).pop()?.replace(/\?.*$/, "") ?? "document";
+        const fileName = effectiveUrl.split("/").filter(Boolean).pop()?.replace(/\?.*$/, "") ?? "document";
         page = {
           url: doc.url,
           title: doc.title,
@@ -212,7 +290,7 @@ export async function crawlLinkedPages(
     if (depth >= maxDepth) continue;
     const htmlForLinks = page.rawHtml ?? "";
     const nestedLinks = extractLinksFromHTML(String(htmlForLinks), String(page.url ?? ""));
-    const documentLinksOnly = nestedLinks.filter((u) => isDocumentUrl(u));
+    const documentLinksOnly = nestedLinks.filter((u) => isDocumentUrl(u) || isCanvasFilePreviewUrl(u));
     const toEnqueue = documentLinksOnly
       .filter((u) => {
         const n = u.replace(/#.*$/, "").replace(/\/$/, "");
