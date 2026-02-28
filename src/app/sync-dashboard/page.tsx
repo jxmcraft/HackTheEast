@@ -22,6 +22,9 @@ import { LessonRequest } from "@/components/lesson/LessonRequest";
 import { RecommendedLessons } from "@/components/dashboard/RecommendedLessons";
 import { cn } from "@/lib/utils";
 
+const monthDayFormatter = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
+const monthYearFormatter = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" });
+
 type CanvasCourse = { id: number; name: string; course_code?: string };
 type CanvasAssignment = {
   id: number;
@@ -388,7 +391,7 @@ export default function SyncDashboardPage() {
     const d = String(date.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   };
-  const monthLabel = calendarMonth.toLocaleString(undefined, { month: "long", year: "numeric" });
+  const monthLabel = monthYearFormatter.format(calendarMonth);
   const startOfWeek = (date: Date) => {
     const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     d.setDate(d.getDate() - d.getDay());
@@ -426,7 +429,7 @@ export default function SyncDashboardPage() {
     streak += 1;
     streakCursor.setDate(streakCursor.getDate() - 1);
   }
-  const weekRangeLabel = `${weekStart.toLocaleDateString(undefined, { month: "short", day: "numeric" })} - ${weekEnd.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+  const weekRangeLabel = `${monthDayFormatter.format(weekStart)} - ${monthDayFormatter.format(weekEnd)}`;
   const weekDayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const weekDayStats = weekDayLabels.map((label, index) => {
     const dayStart = new Date(weekStart);
@@ -438,7 +441,7 @@ export default function SyncDashboardPage() {
       const created = new Date(lesson.created_at);
       return created >= dayStart && created <= dayEnd;
     }).length;
-    return { label, count, dateLabel: dayStart.toLocaleDateString(undefined, { month: "short", day: "numeric" }) };
+    return { label, count, dateLabel: monthDayFormatter.format(dayStart) };
   });
   const weekDayLessons = weekDayLabels.map((label, index) => {
     const dayStart = new Date(weekStart);
@@ -455,7 +458,7 @@ export default function SyncDashboardPage() {
 
     return {
       label,
-      dateLabel: dayStart.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+      dateLabel: monthDayFormatter.format(dayStart),
       lessons,
     };
   });
