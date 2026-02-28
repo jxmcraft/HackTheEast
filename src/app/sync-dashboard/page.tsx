@@ -7,6 +7,8 @@ import {
   ClipboardList,
   Loader2,
   RefreshCw,
+  MessageCircle,
+  ExternalLink,
 } from "lucide-react";
 import {
   Table,
@@ -127,6 +129,25 @@ export default function SyncDashboardPage() {
             {error}
           </div>
         )}
+
+        <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 md:p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-lg font-semibold">
+              <MessageCircle className="h-5 w-5 text-[var(--muted-foreground)]" />
+              StudyBuddy – Avatar & Chatbot
+            </h2>
+            <Link
+              href="/studybuddy"
+              className="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-purple-700"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Open StudyBuddy
+            </Link>
+          </div>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            Your tutor avatar, voice, and chatbot are saved in StudyBuddy. Open StudyBuddy and use &quot;Link to account&quot; on the content selection page to sync them to this account. Use &quot;Load from account&quot; to restore on another device.
+          </p>
+        </section>
 
         <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 md:p-6">
           <div className="mb-4 flex items-center justify-between">

@@ -130,7 +130,7 @@ export default function PracticeQuestion({
             </button>
           )}
         </div>
-        <p className="text-xs text-gray-500 mt-3">Powered by MiniMax abab6.5</p>
+        <p className="text-xs text-gray-600 mt-3">Powered by MiniMax abab6.5</p>
       </div>
     );
   }
@@ -158,7 +158,7 @@ export default function PracticeQuestion({
             key={idx}
             onClick={() => !submitted && setSelectedIndex(idx)}
             disabled={submitted}
-            className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-colors ${
+            className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-colors text-gray-900 ${
               submitted
                 ? idx === quiz.correctIndex
                   ? "border-green-500 bg-green-50"
@@ -252,7 +252,7 @@ export default function PracticeQuestion({
         </div>
       )}
 
-      <p className="text-xs text-gray-500 mt-3">Powered by MiniMax abab6.5</p>
+      <p className="text-xs text-gray-600 mt-3">Powered by MiniMax abab6.5</p>
     </div>
   );
 }

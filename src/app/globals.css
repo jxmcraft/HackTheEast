@@ -17,3 +17,42 @@ body {
   color: var(--foreground);
   background: var(--background);
 }
+
+/* Talking avatar: head idle (subtle look-around) and mouth */
+@keyframes head-idle {
+  0%,
+  100% {
+    transform: rotate(0deg) rotateY(0deg);
+  }
+  25% {
+    transform: rotate(-2deg) rotateY(3deg);
+  }
+  50% {
+    transform: rotate(1deg) rotateY(-2deg);
+  }
+  75% {
+    transform: rotate(2deg) rotateY(2deg);
+  }
+}
+
+@keyframes mouth-idle {
+  0%,
+  100% {
+    transform: translateX(-50%) scaleY(0.7);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translateX(-50%) scaleY(0.85);
+    opacity: 1;
+  }
+}
+
+@keyframes mouth-speak {
+  0%,
+  100% {
+    transform: translateX(-50%) scaleY(0.5);
+  }
+  50% {
+    transform: translateX(-50%) scaleY(1.4);
+  }
+}

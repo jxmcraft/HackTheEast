@@ -1,9 +1,11 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { SettingsForm } from "./SettingsForm";
 
 export default async function SettingsPage() {
   const supabase = createClient();
+  if (!supabase) redirect("/login");
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -20,6 +22,12 @@ export default async function SettingsPage() {
       <h1 className="text-2xl font-bold">Settings</h1>
       <p className="text-sm text-[var(--muted-foreground)]">
         Signed in as {profile?.email ?? user.email}
+      </p>
+      <p className="text-sm text-[var(--muted-foreground)]">
+        <Link href="/studybuddy" className="text-purple-400 hover:text-purple-300 underline">
+          Open StudyBuddy
+        </Link>
+        {" "}to link your avatar and chatbot to this account.
       </p>
       <SettingsForm
         canvasApiUrl={profile?.canvas_api_url ?? ""}

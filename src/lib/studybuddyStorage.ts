@@ -42,12 +42,14 @@ export function getUserData(): StudyBuddyUser | null {
 }
 
 /**
- * Save user data to localStorage
+ * Save user data to localStorage.
+ * Dispatches a custom event so the persistent avatar can update without navigation.
  */
 export function saveUserData(user: StudyBuddyUser): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+    window.dispatchEvent(new CustomEvent("studybuddy-user-updated"));
   } catch (e) {
     console.error("Failed to save user data:", e);
   }
