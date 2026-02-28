@@ -23,6 +23,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.27",
+    "avataaars": "^2.0.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.575.0",
     "next": "^14.2.35",
@@ -34,9 +35,9 @@
     "typescript": "^5.9.3"
   },
   "devDependencies": {
+    "dotenv": "^16.4.5",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.35",
-    "tsx": "^4.21.0",
-    "dotenv": "^16.4.5"
+    "tsx": "^4.21.0"
   }
 }
