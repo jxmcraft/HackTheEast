@@ -95,6 +95,7 @@ export async function storeCourseMaterials(
     const storagePath = material.metadata?.file_storage_path as string | undefined;
     const fileName = (material.metadata?.file_name as string) ?? "file";
     const contentType = (material.metadata?.file_content_type as string) ?? "application/octet-stream";
+    let fileRecordFailed = false;
     if (storagePath) {
       const { error: fileErr } = await supabase.from("course_material_files").upsert(
         {
@@ -107,7 +108,10 @@ export async function storeCourseMaterials(
         },
         { onConflict: "course_id,canvas_item_id" }
       );
-      if (fileErr) console.warn("Failed to upsert course_material_files:", fileErr.message);
+      if (fileErr) {
+        console.warn("Failed to upsert course_material_files:", fileErr.message);
+        fileRecordFailed = true;
+      }
     }
 
     const chunks = chunkText(material.content_text);
@@ -168,14 +172,23 @@ export async function storeCourseMaterials(
       );
     }
 
-    const { error: hashErr } = await supabase
-      .from("material_content_hashes")
-      .upsert(
-        { course_id: courseId, canvas_item_id: material.canvas_item_id, content_hash: hash },
-        { onConflict: "course_id,canvas_item_id" }
-      );
-    if (hashErr) {
-      console.warn("Failed to upsert material_content_hashes:", hashErr.message);
+    const uploadFailed = material.metadata?.upload_failed === true;
+    const incompleteChunks = materialChunksCreated < chunks.length;
+    const fullSuccess =
+      materialChunksCreated > 0 &&
+      !uploadFailed &&
+      !fileRecordFailed &&
+      !incompleteChunks;
+    if (fullSuccess) {
+      const { error: hashErr } = await supabase
+        .from("material_content_hashes")
+        .upsert(
+          { course_id: courseId, canvas_item_id: material.canvas_item_id, content_hash: hash },
+          { onConflict: "course_id,canvas_item_id" }
+        );
+      if (hashErr) {
+        console.warn("Failed to upsert material_content_hashes:", hashErr.message);
+      }
     }
 
     seenMaterialKeys.add(material.canvas_item_id);

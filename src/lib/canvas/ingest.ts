@@ -366,6 +366,7 @@ export async function ingestCourseMaterials(
                 meta = { ...meta, file_storage_path: storagePath, file_name: lp.fileFileName, file_content_type: lp.fileContentType };
               } catch (e) {
                 console.warn("Upload linked file failed:", e instanceof Error ? e.message : e);
+                meta = { ...meta, upload_failed: true };
               }
             }
             await addMaterial(canvasItemId, "page", lp.text, meta);
@@ -450,6 +451,7 @@ export async function ingestCourseMaterials(
                     meta = { ...meta, file_storage_path: storagePath, file_name: lp.fileFileName, file_content_type: lp.fileContentType };
                   } catch (e) {
                     console.warn("Upload linked file failed:", e instanceof Error ? e.message : e);
+                    meta = { ...meta, upload_failed: true };
                   }
                 }
                 await addMaterial(canvasItemId, "page", lp.text, meta);
@@ -516,6 +518,7 @@ export async function ingestCourseMaterials(
                     meta = { ...meta, file_storage_path: storagePath, file_name: lp.fileFileName, file_content_type: lp.fileContentType };
                   } catch (e) {
                     console.warn("Upload linked file failed:", e instanceof Error ? e.message : e);
+                    meta = { ...meta, upload_failed: true };
                   }
                 }
                 await addMaterial(canvasItemId, "page", lp.text, meta);
@@ -551,18 +554,23 @@ export async function ingestCourseMaterials(
               if (doc?.text && doc.text.length >= 50) contentText = doc.text;
               if (doc?.buffer && options?.uploadFile) {
                 const fileName = file.filename ?? file.display_name ?? title;
-                const storagePath = await options.uploadFile({
-                  canvasItemId: `file-${courseId}-${file.id}`,
-                  buffer: doc.buffer,
-                  fileName,
-                  contentType: doc.contentType,
-                });
-                fileMeta = {
-                  ...fileMeta,
-                  file_storage_path: storagePath,
-                  file_name: fileName,
-                  file_content_type: doc.contentType,
-                };
+                try {
+                  const storagePath = await options.uploadFile({
+                    canvasItemId: `file-${courseId}-${file.id}`,
+                    buffer: doc.buffer,
+                    fileName,
+                    contentType: doc.contentType,
+                  });
+                  fileMeta = {
+                    ...fileMeta,
+                    file_storage_path: storagePath,
+                    file_name: fileName,
+                    file_content_type: doc.contentType,
+                  };
+                } catch (e) {
+                  console.warn(`Failed to extract/upload file ${file.id}:`, e instanceof Error ? e.message : e);
+                  fileMeta = { ...fileMeta, upload_failed: true };
+                }
               }
             } catch (e) {
               console.warn(`Failed to extract/upload file ${file.id}:`, e instanceof Error ? e.message : e);
