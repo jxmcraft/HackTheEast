@@ -1,7 +1,7 @@
 import { redirect, notFound } from "next/navigation";
-import Link from "next/link";
 import { createClientOrThrow } from "@/utils/supabase/server";
-import { LessonContent } from "@/components/lesson/LessonContent";
+import { LessonPageClient } from "@/components/lesson/LessonPageClient";
+import type { AvatarStyle } from "@/lib/avatar/personality";
 
 type Props = { params: Promise<{ courseId: string; topic: string }>; searchParams: Promise<{ context?: string; lessonId?: string }> };
 
@@ -19,8 +19,20 @@ export default async function LessonPage({ params, searchParams }: Props) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/lesson/" + courseId + "/" + topic);
 
-  const credentials = await (await import("@/lib/canvas-credentials")).getCanvasCredentialsFromProfile();
+  const { data: prefs } = await supabase
+    .from("user_preferences")
+    .select("avatar_style, avatar_name")
+    .eq("id", user.id)
+    .single();
+
+  const rawStyle = prefs?.avatar_style ?? "";
+  const avatarStyle: AvatarStyle = ["strict", "encouraging", "socratic"].includes(rawStyle)
+    ? (rawStyle as AvatarStyle)
+    : "encouraging";
+  const avatarName = (prefs?.avatar_name ?? "").trim() || "Tutor";
+
   let courseName: string | null = null;
+  const credentials = await (await import("@/lib/canvas-credentials")).getCanvasCredentialsFromProfile();
   if (credentials?.baseUrl && credentials?.token) {
     try {
       const courses = await (await import("@/lib/canvas")).syncCourses(credentials);
@@ -32,45 +44,14 @@ export default async function LessonPage({ params, searchParams }: Props) {
   }
 
   return (
-    <main className="min-h-screen p-6 md:p-10">
-      <div className="mx-auto max-w-6xl">
-        <nav className="mb-6 flex flex-wrap items-center gap-2 text-sm text-[var(--muted-foreground)]">
-          <Link href="/sync-dashboard" className="hover:text-[var(--foreground)]">Dashboard</Link>
-          <span>/</span>
-          <span>{courseName ?? `Course ${courseId}`}</span>
-          <span>/</span>
-          <span className="text-[var(--foreground)]">{topicDecoded}</span>
-        </nav>
-
-        <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
-          <section className="min-h-[400px] rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
-            <h1 className="mb-2 text-xl font-bold">{topicDecoded}</h1>
-            <p className="mb-4 text-sm text-[var(--muted-foreground)]">
-              {courseName ? `Course: ${courseName}` : `Course ID: ${courseId}`}
-            </p>
-            {context && (
-              <p className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--muted)]/30 p-3 text-sm">
-                <span className="font-medium">Context:</span> {context}
-              </p>
-            )}
-            <LessonContent
-              courseId={courseId}
-              topic={topicDecoded}
-              context={context}
-              lessonIdFromUrl={lessonIdFromUrl}
-            />
-          </section>
-          <aside className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
-            <h2 className="mb-3 text-sm font-semibold">Tutor</h2>
-            <div className="h-24 rounded-lg bg-[var(--muted)]/50 flex items-center justify-center text-[var(--muted-foreground)] text-sm">
-              Avatar (Phase 4)
-            </div>
-            <div className="mt-4 rounded-lg border border-[var(--border)] p-3 text-sm text-[var(--muted-foreground)]">
-              Chat / Q&A (Phase 4)
-            </div>
-          </aside>
-        </div>
-      </div>
-    </main>
+    <LessonPageClient
+      courseId={courseId}
+      topic={topicDecoded}
+      context={context}
+      courseName={courseName}
+      lessonIdFromUrl={lessonIdFromUrl}
+      avatarName={avatarName}
+      avatarStyle={avatarStyle}
+    />
   );
 }

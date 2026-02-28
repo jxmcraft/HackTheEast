@@ -57,8 +57,10 @@ interface VideoTeacherProps {
   topic: string;
   fullTopicContent?: string;
   uploadedMaterials?: UploadedDocForContext[];
-  sourceType?: "neural_networks" | "pdf";
+  sourceType?: "neural_networks" | "pdf" | "lesson_topic";
   pdfId?: string;
+  /** Topic from a dashboard lesson (Practice in StudyBuddy link) for chat context */
+  lessonTopicFromDashboard?: string;
   onComplete?: () => void;
   onBack?: () => void;
 }
@@ -72,6 +74,7 @@ export default function VideoTeacher({
   uploadedMaterials = [],
   sourceType = "neural_networks",
   pdfId,
+  lessonTopicFromDashboard,
   onComplete,
   onBack,
 }: VideoTeacherProps) {
@@ -894,6 +897,7 @@ export default function VideoTeacher({
               personalityPrompt={personalityPrompt}
               voiceId={avatarConfig.voiceId}
               uploadedMaterials={uploadedMaterials}
+              lessonTopicFromDashboard={lessonTopicFromDashboard}
             />
           ) : (
             <PracticeQuestion
