@@ -13,23 +13,6 @@ const getCanvasConfig = () => {
   return { apiBase, token };
 };
 
-async function canvasFetch<T>(path: string, params?: Record<string, string>): Promise<T> {
-  const { apiBase, token } = getCanvasConfig();
-  const url = new URL(apiBase + path);
-  if (params) {
-    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  }
-  const res = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Canvas API ${res.status}: ${text || res.statusText}`);
-  }
-  return res.json() as Promise<T>;
-}
-
 /** Paginate through a Canvas list endpoint (Link header). */
 async function canvasFetchAll<T>(path: string, params?: Record<string, string>): Promise<T[]> {
   const { apiBase, token } = getCanvasConfig();
