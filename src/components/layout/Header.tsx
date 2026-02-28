@@ -34,6 +34,12 @@ export function Header() {
             <>
               <span className="text-[var(--muted-foreground)]">{user.email}</span>
               <Link
+                href="/reels"
+                className="rounded-lg border border-[var(--border)] px-3 py-1 hover:bg-[var(--muted)]/40"
+              >
+                Reels
+              </Link>
+              <Link
                 href="/settings"
                 className="rounded-lg border border-[var(--border)] px-3 py-1 hover:bg-[var(--muted)]/40"
               >

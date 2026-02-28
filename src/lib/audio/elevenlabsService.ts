@@ -101,6 +101,58 @@ export async function uploadAudioToStorage(audioBuffer: Buffer, lessonId: string
     throw new Error(`Failed to upload audio: ${error.message}`);
   }
 
+  const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(fileName, 3600);
+  if (signed?.signedUrl) return signed.signedUrl;
+  const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(fileName);
+  return urlData.publicUrl;
+}
+
+/**
+ * Upload video buffer (MP4) to Supabase Storage and return public URL.
+ * Used for Study Reels (image + audio composed video).
+ */
+export async function uploadVideoToStorage(videoBuffer: Buffer, reelId: string): Promise<string> {
+  const supabase = createServiceRoleClient();
+  const fileName = `reels/${reelId}/video_${Date.now()}.mp4`;
+
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(fileName, videoBuffer, {
+      contentType: "video/mp4",
+      upsert: true,
+    });
+
+  if (error) {
+    throw new Error(`Failed to upload video: ${error.message}`);
+  }
+
+  const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(fileName, 3600);
+  if (signed?.signedUrl) return signed.signedUrl;
+  const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(fileName);
+  return urlData.publicUrl;
+}
+
+/**
+ * Upload image buffer (PNG) to Supabase Storage and return public URL.
+ * Used for Reels fallback (cover image when no video).
+ */
+export async function uploadImageToStorage(imageBuffer: Buffer, reelId: string): Promise<string> {
+  const supabase = createServiceRoleClient();
+  const fileName = `reels/${reelId}/cover_${Date.now()}.png`;
+
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(fileName, imageBuffer, {
+      contentType: "image/png",
+      upsert: true,
+    });
+
+  if (error) {
+    throw new Error(`Failed to upload image: ${error.message}`);
+  }
+
+  const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(fileName, 3600);
+  if (signed?.signedUrl) return signed.signedUrl;
   const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(fileName);
   return urlData.publicUrl;
 }

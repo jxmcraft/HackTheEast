@@ -14,6 +14,7 @@ import {
   RefreshCw,
   PlusCircle,
   Settings,
+  Video,
   XCircle,
   MessageCircle,
   ExternalLink,
@@ -580,6 +581,14 @@ export default function SyncDashboardPage() {
             >
               <TrendingUp className="h-4 w-4" />
               <span className="hidden sm:inline">Progress</span>
+            </Link>
+            <Link
+              href="/reels"
+              className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-[var(--muted)]"
+              aria-label="Study Reels"
+            >
+              <Video className="h-4 w-4" />
+              <span className="hidden sm:inline">Reels</span>
             </Link>
           </div>
           <div className="flex flex-wrap items-center gap-3">
