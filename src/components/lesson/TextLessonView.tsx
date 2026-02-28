@@ -3,9 +3,9 @@
 import ReactMarkdown from "react-markdown";
 import { useState } from "react";
 
-type Props = { markdown: string };
+type Props = { markdown: string; actions?: React.ReactNode };
 
-export function TextLessonView({ markdown }: Props) {
+export function TextLessonView({ markdown, actions }: Props) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -17,7 +17,8 @@ export function TextLessonView({ markdown }: Props) {
 
   return (
     <div className="prose prose-invert max-w-none">
-      <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-3">{actions}</div>
         <button
           type="button"
           onClick={handleCopy}

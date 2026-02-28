@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { SignOutButton } from "@/components/auth/SignOutButton";
@@ -9,8 +10,15 @@ export function Header() {
 
   return (
     <header className="flex items-center justify-between border-b border-[var(--border)] px-6 py-3">
-      <Link href="/" className="font-semibold">
-        HTE
+      <Link href="/" className="inline-flex items-center" aria-label="Mastering Insight Home">
+        <Image
+          src="/branding/logo.png"
+          alt="Mastering Insight"
+          width={360}
+          height={108}
+          className="h-20 w-auto md:h-24"
+          priority
+        />
       </Link>
       {!loading && (
         <nav className="flex items-center gap-4 text-sm">

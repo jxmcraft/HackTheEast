@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { getUser } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
@@ -8,7 +9,14 @@ export default async function HomePage() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-8">
-      <h1 className="text-3xl font-bold">HTE</h1>
+      <Image
+        src="/branding/logo.png"
+        alt="Mastering Insight"
+        width={820}
+        height={320}
+        className="h-56 w-auto md:h-72"
+        priority
+      />
       <p className="text-[var(--muted-foreground)]">
         Canvas LMS sync & study dashboard
       </p>

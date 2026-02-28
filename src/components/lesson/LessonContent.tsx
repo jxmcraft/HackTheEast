@@ -578,6 +578,37 @@ export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLes
 
   const sources = state.sources ?? [];
   const content = state.content as Record<string, unknown>;
+  const textLessonActions = (
+    <>
+      <button
+        type="button"
+        onClick={() => loadOrGenerateAudioVisual("podcast")}
+        className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/50 px-4 py-2 text-sm hover:bg-[var(--muted)]"
+      >
+        Convert to podcast
+      </button>
+      <button
+        type="button"
+        onClick={() => loadOrGenerateAudioVisual("slides")}
+        className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/50 px-4 py-2 text-sm hover:bg-[var(--muted)]"
+      >
+        Convert to slide deck
+      </button>
+      <button
+        type="button"
+        onClick={() => generate(state.lessonId ?? null)}
+        className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/50 px-4 py-2 text-sm hover:bg-[var(--muted)]"
+      >
+        Regenerate
+      </button>
+      <Link
+        href="/sync-dashboard"
+        className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--muted)]"
+      >
+        New topic
+      </Link>
+    </>
+  );
 
   return (
     <div className="space-y-6">
@@ -588,7 +619,7 @@ export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLes
         />
       )}
       {state.mode === "text" && typeof content.markdown === "string" && (
-        <TextLessonView markdown={content.markdown} />
+        <TextLessonView markdown={content.markdown} actions={textLessonActions} />
       )}
       {state.mode === "slides" && Array.isArray(content.slides) && (
         <SlidesLessonView
@@ -610,35 +641,37 @@ export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLes
         />
       )}
 
-      <div className="flex flex-wrap gap-3">
-        <button
-          type="button"
-          onClick={() => loadOrGenerateAudioVisual("podcast")}
-          className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/50 px-4 py-2 text-sm hover:bg-[var(--muted)]"
-        >
-          Convert to podcast
-        </button>
-        <button
-          type="button"
-          onClick={() => loadOrGenerateAudioVisual("slides")}
-          className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/50 px-4 py-2 text-sm hover:bg-[var(--muted)]"
-        >
-          Convert to slide deck
-        </button>
-        <button
-          type="button"
-          onClick={() => generate(state.lessonId ?? null)}
-          className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/50 px-4 py-2 text-sm hover:bg-[var(--muted)]"
-        >
-          Regenerate
-        </button>
-        <Link
-          href="/sync-dashboard"
-          className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--muted)]"
-        >
-          New topic
-        </Link>
-      </div>
+      {state.mode !== "text" && (
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => loadOrGenerateAudioVisual("podcast")}
+            className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/50 px-4 py-2 text-sm hover:bg-[var(--muted)]"
+          >
+            Convert to podcast
+          </button>
+          <button
+            type="button"
+            onClick={() => loadOrGenerateAudioVisual("slides")}
+            className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/50 px-4 py-2 text-sm hover:bg-[var(--muted)]"
+          >
+            Convert to slide deck
+          </button>
+          <button
+            type="button"
+            onClick={() => generate(state.lessonId ?? null)}
+            className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/50 px-4 py-2 text-sm hover:bg-[var(--muted)]"
+          >
+            Regenerate
+          </button>
+          <Link
+            href="/sync-dashboard"
+            className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--muted)]"
+          >
+            New topic
+          </Link>
+        </div>
+      )}
 
       {sources.length > 0 && (
         <section className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/20 p-4">
