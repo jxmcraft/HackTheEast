@@ -67,6 +67,21 @@ body {
   }
 }
 
+/* Blink overlay: eyelid band at eye level (opacity flash) */
+@keyframes avatar-blink {
+  0%,
+  90%,
+  100% {
+    opacity: 0;
+  }
+  5% {
+    opacity: 0.9;
+  }
+  15% {
+    opacity: 0;
+  }
+}
+
 @keyframes fadeSlide {
   from {
     opacity: 0;

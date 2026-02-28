@@ -139,9 +139,9 @@ export default function VideoTeacher({
     setSaved(isLectureSaved({ sectionId, sectionTitle, topic, sourceType, pdfId }));
   }, [sectionId, sectionTitle, topic, sourceType, pdfId]);
 
-  // Preload first sentence's audio so Play starts faster
+  // Preload first sentence's audio only after transcript is ready (so we don't preload raw section content)
   useEffect(() => {
-    if (sentences.length === 0 || currentSentenceIndex !== 0) return;
+    if (scriptLoading || sentences.length === 0 || currentSentenceIndex !== 0) return;
     const voiceId = avatarConfig.voiceId || undefined;
     fetch("/api/generate/tts", {
       method: "POST",
@@ -160,7 +160,7 @@ export default function VideoTeacher({
         }
       })
       .catch(() => {});
-  }, [sentences.length, avatarConfig.voiceId]);
+  }, [scriptLoading, sentences.length, currentSentenceIndex, avatarConfig.voiceId]);
 
   // Fetch expanded script (with cache for consistency) and slides on mount
   useEffect(() => {
@@ -251,6 +251,7 @@ export default function VideoTeacher({
   };
 
   const handlePlayPause = () => {
+    if (scriptLoading) return;
     if (isPlaying) {
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
@@ -503,11 +504,10 @@ export default function VideoTeacher({
   }, [countdownActive, onComplete]);
 
   useEffect(() => {
-    if (isPlaying && currentSentenceIndex < sentences.length) {
-      narrateNextSentence();
-    }
+    if (scriptLoading || !isPlaying || currentSentenceIndex >= sentences.length) return;
+    narrateNextSentence();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentSentenceIndex, isPlaying]);
+  }, [currentSentenceIndex, isPlaying, scriptLoading]);
 
   const currentSlideIndex = slides.length > 0
     ? Math.min(Math.floor((currentSentenceIndex / Math.max(sentences.length, 1)) * slides.length), slides.length - 1)
@@ -656,7 +656,9 @@ export default function VideoTeacher({
             <div className="flex items-center gap-4">
               <button
                 onClick={handlePlayPause}
-                className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] p-3 rounded-full transition-colors"
+                disabled={scriptLoading}
+                className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] p-3 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title={scriptLoading ? "Preparing narration..." : isPlaying ? "Pause" : "Play"}
               >
                 {isPlaying ? (
                   <Pause className="w-6 h-6" />
