@@ -12,7 +12,10 @@ export function AudioLessonView({ script, durationSeconds }: Props) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-[var(--muted-foreground)]">
-        Estimated duration: {durationLabel} (read aloud). No audio file generated in MVP; use the script below.
+        {durationSeconds > 0 && (
+          <>Estimated duration: {durationLabel} (read aloud). </>
+        )}
+        No audio file for this lesson yet. Use the script below, or generate a podcast from the lesson page to hear it read aloud.
       </p>
       <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-6">
         <div className="space-y-4">

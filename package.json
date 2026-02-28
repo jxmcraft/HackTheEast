@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "create-example-user": "bun scripts/create-example-user.ts"
+    "create-example-user": "bun scripts/create-example-user.ts",
+    "create-lesson-audio-bucket": "bun scripts/create-lesson-audio-bucket.ts"
   },
   "keywords": [],
   "author": "",
