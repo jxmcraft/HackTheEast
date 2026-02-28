@@ -33,6 +33,8 @@ interface LiveChatProps {
   personalityPrompt: string;
   voiceId?: string;
   uploadedMaterials?: UploadedDocForChat[];
+  /** Topic from a dashboard lesson (Practice in StudyBuddy) for similar-content context */
+  lessonTopicFromDashboard?: string;
   onSendMessage?: (message: string) => Promise<string>;
 }
 
@@ -60,6 +62,7 @@ export default function LiveChat({
   personalityPrompt,
   voiceId,
   uploadedMaterials = [],
+  lessonTopicFromDashboard,
   onSendMessage,
 }: LiveChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -131,6 +134,10 @@ export default function LiveChat({
       if (onSendMessage) {
         responseText = await onSendMessage(inputValue);
       } else {
+        const payloadLessonTopic = lessonTopicFromDashboard ?? undefined;
+        // #region agent log
+        fetch("http://127.0.0.1:7242/ingest/b4376a79-f653-4c48-8ff8-e5fbe86d419a", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ location: "LiveChat.tsx:sendMessage", message: "Sending chat request", data: { topic, section, lessonTopicFromDashboard: payloadLessonTopic ?? null }, timestamp: Date.now(), hypothesisId: "C" }) }).catch(() => {});
+        // #endregion
         const res = await fetch("/api/generate/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -140,6 +147,7 @@ export default function LiveChat({
             section,
             personalityPrompt,
             sectionContent,
+            lessonTopicFromDashboard: payloadLessonTopic,
             uploadsContext: uploadedMaterials.map((u) => ({
               name: u.name,
               extracted_text: u.extracted_text,
@@ -247,7 +255,11 @@ export default function LiveChat({
       <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white p-4">
         <h3 className="text-lg font-semibold text-white">Chat with Your Tutor</h3>
         <p className="text-sm text-white/95">
-          Topic: {topic} • Section: {section}
+          {lessonTopicFromDashboard ? (
+            <>Your lesson: <strong>{lessonTopicFromDashboard}</strong> • Section: {section}</>
+          ) : (
+            <>Topic: {topic} • Section: {section}</>
+          )}
         </p>
       </div>
 

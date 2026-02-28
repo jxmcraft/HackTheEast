@@ -27,9 +27,25 @@ type Props = {
   topic: string;
   context: string;
   lessonIdFromUrl?: string | null;
+  /** When lesson is loaded or generated, call with lessonId and a short content summary for chat context */
+  onLessonReady?: (lessonId: string, contentSummary: string) => void;
 };
 
-export function LessonContent({ courseId, topic, context, lessonIdFromUrl }: Props) {
+function getContentSummary(content: unknown, mode: string): string {
+  if (!content || typeof content !== "object") return "";
+  const c = content as Record<string, unknown>;
+  if (mode === "text" && typeof c.markdown === "string")
+    return c.markdown.slice(0, 6000);
+  if (mode === "slides" && Array.isArray(c.slides)) {
+    const slides = c.slides as { title?: string; bullets?: string[] }[];
+    return slides.map((s) => `${s.title ?? ""}\n${(s.bullets ?? []).join("\n")}`).join("\n\n").slice(0, 6000);
+  }
+  if (mode === "audio" && Array.isArray(c.script))
+    return (c.script as { text?: string }[]).map((s) => s.text ?? "").join(" ").slice(0, 6000);
+  return "";
+}
+
+export function LessonContent({ courseId, topic, context, lessonIdFromUrl, onLessonReady }: Props) {
   const [state, setState] = useState<LessonContentState>({ status: "idle" });
 
   const generate = useCallback(
@@ -111,6 +127,13 @@ export function LessonContent({ courseId, topic, context, lessonIdFromUrl }: Pro
       void generate(null);
     }
   }, [lessonIdFromUrl]); // eslint-disable-line react-hooks/exhaustive-deps -- run once on mount
+
+  useEffect(() => {
+    if (state.status === "ready" && state.lessonId && state.content && onLessonReady) {
+      const summary = getContentSummary(state.content, state.mode ?? "text");
+      onLessonReady(state.lessonId, summary);
+    }
+  }, [state.status, state.lessonId, state.content, state.mode, onLessonReady]);
 
   if (state.status === "loading") {
     return (

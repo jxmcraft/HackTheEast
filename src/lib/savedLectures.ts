@@ -9,7 +9,7 @@ export type SavedLecture = {
   sectionId: string;
   sectionTitle: string;
   topic: string;
-  sourceType: "neural_networks" | "pdf";
+  sourceType: "neural_networks" | "pdf" | "lesson_topic";
   pdfId?: string;
   savedAt: string; // ISO date
 };

@@ -12,6 +12,8 @@ export interface StudyBuddyUser {
   lastSection: string;
   completedSections?: string[];
   practiceResults?: PracticeResult[];
+  /** Topic from a dashboard lesson when user opened StudyBuddy via "Practice in StudyBuddy" link */
+  lessonTopicFromDashboard?: string;
 }
 
 export interface UserProfile {
@@ -39,6 +41,9 @@ export interface PracticeResult {
 }
 
 const STORAGE_KEY = "studybuddy_user";
+const PENDING_LESSON_TOPIC_KEY = "studybuddy_pending_lesson_topic";
+const RECENT_LESSON_TOPICS_KEY = "studybuddy_recent_lesson_topics";
+const MAX_RECENT_LESSON_TOPICS = 10;
 
 const DEFAULT_USER_PROFILE: UserProfile = {
   name: "",
@@ -95,6 +100,10 @@ function normalizeUserData(raw: unknown): StudyBuddyUser | null {
       practiceResults: Array.isArray(data.practiceResults)
         ? (data.practiceResults as PracticeResult[])
         : [],
+      lessonTopicFromDashboard:
+        typeof (data as Record<string, unknown>).lessonTopicFromDashboard === "string"
+          ? (data as Record<string, unknown>).lessonTopicFromDashboard as string
+          : undefined,
     };
   }
 
@@ -116,6 +125,7 @@ function normalizeUserData(raw: unknown): StudyBuddyUser | null {
     lastSection: legacy.lastSection ?? "intro",
     completedSections: Array.isArray(legacy.completedSections) ? legacy.completedSections : [],
     practiceResults: Array.isArray(legacy.practiceResults) ? legacy.practiceResults : [],
+    lessonTopicFromDashboard: undefined,
   };
 }
 
@@ -168,6 +178,7 @@ export function initializeUser(
         practiceResults: [],
       };
 
+  const pendingLessonTopic = getAndClearPendingLessonTopic();
   const updatedUser: StudyBuddyUser = {
     ...baseUser,
     userProfile: { ...DEFAULT_USER_PROFILE, ...userProfile },
@@ -177,6 +188,7 @@ export function initializeUser(
       avatarConfig: avatarProfile.avatarConfig ?? {},
       tutorVoice: avatarProfile.tutorVoice || avatarProfile.avatarConfig?.voiceId || DEFAULT_AVATAR_PROFILE.tutorVoice,
     },
+    lessonTopicFromDashboard: pendingLessonTopic ?? baseUser.lessonTopicFromDashboard,
   };
 
   saveUserData(updatedUser);
@@ -245,6 +257,72 @@ export function updateLastSection(topic: string, section: string): void {
   user.lastTopic = topic;
   user.lastSection = section;
   saveUserData(user);
+}
+
+/**
+ * Set topic from a dashboard lesson (when user opens StudyBuddy from a lesson page link).
+ * Used to show "similar content" / same-topic context in StudyBuddy chat.
+ * If user has no StudyBuddy data yet, stores in a pending key so it can be applied after setup.
+ */
+export function setLessonTopicFromDashboard(topic: string | null): void {
+  const t = topic?.trim() || null;
+  const user = getUserData();
+  if (user) {
+    user.lessonTopicFromDashboard = t ?? undefined;
+    saveUserData(user);
+  } else if (typeof window !== "undefined" && t) {
+    try {
+      localStorage.setItem(PENDING_LESSON_TOPIC_KEY, t);
+    } catch {
+      // ignore
+    }
+  }
+  if (t) addToRecentLessonTopics(t);
+}
+
+/**
+ * Append a lesson topic to the recent list (when student clicks Practice in StudyBuddy).
+ * Used to show "Your past lessons" when they open StudyBuddy directly.
+ */
+export function addToRecentLessonTopics(topic: string): void {
+  if (typeof window === "undefined" || !topic?.trim()) return;
+  try {
+    const raw = localStorage.getItem(RECENT_LESSON_TOPICS_KEY);
+    const prev: string[] = raw ? (JSON.parse(raw) as string[]).filter((x) => typeof x === "string" && x.trim()) : [];
+    const next = [topic.trim(), ...prev.filter((x) => x !== topic.trim())].slice(0, MAX_RECENT_LESSON_TOPICS);
+    localStorage.setItem(RECENT_LESSON_TOPICS_KEY, JSON.stringify(next));
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Get recent lesson topics the student opened StudyBuddy with (for "Your past lessons").
+ */
+export function getRecentLessonTopics(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(RECENT_LESSON_TOPICS_KEY);
+    const arr = raw ? (JSON.parse(raw) as unknown) : [];
+    return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === "string" && x.trim().length > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Consume pending lesson topic (set from lesson link before user had an account).
+ * Called from initializeUser so new users get the lesson topic applied.
+ */
+export function getAndClearPendingLessonTopic(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const t = localStorage.getItem(PENDING_LESSON_TOPIC_KEY);
+    if (t) localStorage.removeItem(PENDING_LESSON_TOPIC_KEY);
+    return t;
+  } catch {
+    return null;
+  }
 }
 
 /**
