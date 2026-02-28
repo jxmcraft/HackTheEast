@@ -9,7 +9,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "create-example-user": "bun scripts/create-example-user.ts"
+    "create-example-user": "bun scripts/create-example-user.ts",
+    "setup-litellm": "bun scripts/setup-litellm.ts",
+    "postinstall": "bun run setup-litellm"
   },
   "keywords": [],
   "author": "",

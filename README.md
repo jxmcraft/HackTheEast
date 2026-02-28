@@ -28,11 +28,7 @@ Next.js 14 (App Router) + TypeScript + Tailwind CSS + Supabase. Syncs courses, c
 
    All embedding requests go through the **LiteLLM proxy**. Run the proxy and the app.
 
-   Install the LiteLLM proxy once (Python):
-
-   ```bash
-   pip install 'litellm[proxy]'
-   ```
+   LiteLLM is installed automatically when you run `bun install` (requires Python and pip). To install it manually: `bun run setup-litellm`.
 
    Either run both in one go: `bun run dev:all`, or in two terminals: `bun run proxy` then `bun dev`.
 
@@ -82,6 +78,7 @@ Override with:
 - `bun dev` – Next.js dev server
 - `bun run dev:all` – Next.js and LiteLLM proxy together
 - `bun run proxy` – LiteLLM proxy only (port 4000)
+- `bun run setup-litellm` – Install LiteLLM proxy (runs automatically after `bun install`)
 - `bun run build` – Production build
 - `bun run start` – Start production server
 - `bun run lint` – Run ESLint
