@@ -8,12 +8,14 @@
 
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Play, Pause, SkipForward, Volume2, Settings, ArrowLeft, MessageCircle, BookOpen } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { Play, Pause, SkipForward, Volume2, Settings, ArrowLeft, MessageCircle, BookOpen, X } from "lucide-react";
 import LiveChat from "./LiveChat";
 import PracticeQuestion from "./PracticeQuestion";
-import { CustomAvatar } from "./AvatarStudio";
-import { getUserData } from "@/lib/studybuddyStorage";
+import TalkingAvatar from "./TalkingAvatar";
+import { getUserData, saveUserData } from "@/lib/studybuddyStorage";
+import { stopAllVoice, STOP_ALL_VOICE_EVENT } from "@/lib/voiceControl";
+import LessonDiagram from "./LessonDiagram";
 
 interface VideoTeacherProps {
   sectionTitle: string;
@@ -42,35 +44,91 @@ export default function VideoTeacher({
   const userData = getUserData();
   const avatarName = userData?.name || "Tutor";
   const avatarConfig = userData?.avatarConfig || {};
-  const personalityPrompt = userData?.personalityPrompt || "be clear and helpful";
+  const [personalityPrompt, setPersonalityPrompt] = useState(
+    () => userData?.personalityPrompt || "be clear and helpful"
+  );
+  const [teachingStyleOpen, setTeachingStyleOpen] = useState(false);
+  const [teachingStyleDraft, setTeachingStyleDraft] = useState("");
 
-  // Split content into sentences for narration
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const isPlayingRef = useRef(false);
+  const skipNextStopAllRef = useRef(false);
+  const weAreDispatchersRef = useRef(false);
+  const cancelPlaybackRef = useRef(false);
+  const playbackSpeedRef = useRef(1.0);
+  const volumeRef = useRef(1);
+  const advanceRef = useRef<(() => void) | null>(null);
+  const currentSentenceTextRef = useRef<string>("");
+
+  const [volume, setVolume] = useState(1);
+
+  // Split content into sentences for narration (revision content)
   const sentences = sectionContent.split(/[.!?]+/).filter((s) => s.trim().length > 0);
   const [currentSentenceIndex, setCurrentSentenceIndex] = useState(0);
 
-  // Handle play/pause
+  isPlayingRef.current = isPlaying;
+  playbackSpeedRef.current = playbackSpeed;
+  volumeRef.current = volume;
+
+  useEffect(() => {
+    const u = getUserData();
+    if (u?.personalityPrompt) setPersonalityPrompt(u.personalityPrompt);
+  }, [teachingStyleOpen]);
+
+  const openTeachingStyleModal = () => {
+    setTeachingStyleDraft(personalityPrompt);
+    setTeachingStyleOpen(true);
+  };
+  const saveTeachingStyle = () => {
+    const next = teachingStyleDraft.trim() || "be clear and helpful";
+    setPersonalityPrompt(next);
+    const u = getUserData();
+    if (u) saveUserData({ ...u, personalityPrompt: next });
+    setTeachingStyleOpen(false);
+  };
+
   const handlePlayPause = () => {
     if (isPlaying) {
+      cancelPlaybackRef.current = true;
       window.speechSynthesis.cancel();
+      const audio = currentAudioRef.current;
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+        currentAudioRef.current = null;
+      }
       setIsPlaying(false);
       setIsSpeaking(false);
     } else {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b4376a79-f653-4c48-8ff8-e5fbe86d419a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VideoTeacher.tsx:handlePlayPause(Play)',message:'Play pressed',data:{cancelBefore:cancelPlaybackRef.current},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+      cancelPlaybackRef.current = false;
+      if (currentSentenceIndex >= sentences.length) {
+        setCurrentSentenceIndex(0);
+        setProgress(0);
+      }
       setIsPlaying(true);
-      startNarration();
     }
   };
 
-  // Start narration from current position
-  const startNarration = () => {
-    if (currentSentenceIndex >= sentences.length) {
-      setCurrentSentenceIndex(0);
-      setProgress(0);
+  function stopOwnPlayback(clearPlayingState: boolean) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b4376a79-f653-4c48-8ff8-e5fbe86d419a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VideoTeacher.tsx:stopOwnPlayback',message:'stopOwnPlayback called, setting cancel=true',data:{clearPlayingState},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    cancelPlaybackRef.current = true;
+    window.speechSynthesis.cancel();
+    const audio = currentAudioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+      currentAudioRef.current = null;
     }
-    narrateNextSentence();
-  };
+    setIsSpeaking(false);
+    if (clearPlayingState) setIsPlaying(false);
+  }
 
-  // Narrate the next sentence
-  const narrateNextSentence = () => {
+  async function narrateNextSentence() {
     if (currentSentenceIndex >= sentences.length) {
       setIsPlaying(false);
       setIsSpeaking(false);
@@ -79,43 +137,137 @@ export default function VideoTeacher({
       return;
     }
 
+    cancelPlaybackRef.current = false;
+    skipNextStopAllRef.current = true;
+    weAreDispatchersRef.current = true;
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b4376a79-f653-4c48-8ff8-e5fbe86d419a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VideoTeacher.tsx:narrateNextSentence:beforeStopAllVoice',message:'about to call stopAllVoice',data:{cancelNow:cancelPlaybackRef.current,sentenceIndex:currentSentenceIndex},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+    stopAllVoice();
+    weAreDispatchersRef.current = false;
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b4376a79-f653-4c48-8ff8-e5fbe86d419a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VideoTeacher.tsx:narrateNextSentence:afterStopAllVoice',message:'after stopAllVoice',data:{cancelNow:cancelPlaybackRef.current},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     const sentence = sentences[currentSentenceIndex].trim();
     setCurrentText(sentence);
     setIsSpeaking(true);
 
-    const utterance = new SpeechSynthesisUtterance(sentence);
-    utterance.rate = playbackSpeed;
-    utterance.pitch = 1;
-    
-    utterance.onstart = () => {
-      setIsSpeaking(true);
-    };
-
-    utterance.onend = () => {
+    const advance = () => {
+      if (!isPlayingRef.current) return;
       setIsSpeaking(false);
-      setCurrentSentenceIndex((prev) => prev + 1);
-      setProgress(((currentSentenceIndex + 1) / sentences.length) * 100);
-      
-      // Continue to next sentence after a brief pause
-      if (isPlaying) {
-        setTimeout(() => {
-          narrateNextSentence();
-        }, 500);
-      }
+      setCurrentSentenceIndex((prev) => {
+        const next = Math.min(prev + 1, sentences.length);
+        setProgress((next / sentences.length) * 100);
+        return next;
+      });
+      setTimeout(() => {
+        if (isPlayingRef.current) narrateNextSentence();
+      }, 300);
     };
 
-    window.speechSynthesis.speak(utterance);
-  };
+    advanceRef.current = advance;
+    currentSentenceTextRef.current = sentence;
 
-  // Clean up speech synthesis on unmount
+    const voiceId = avatarConfig.voiceId || undefined;
+    try {
+      const res = await fetch("/api/generate/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: sentence, speed: playbackSpeed, voice_id: voiceId }),
+      });
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b4376a79-f653-4c48-8ff8-e5fbe86d419a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VideoTeacher.tsx:afterTTSFetch',message:'TTS fetch completed',data:{resOk:res.ok,cancelNow:cancelPlaybackRef.current},timestamp:Date.now(),hypothesisId:'A,C,E'})}).catch(()=>{});
+      // #endregion
+      if (cancelPlaybackRef.current) {
+        setIsSpeaking(false);
+        return;
+      }
+      if (res.ok) {
+        const { audioBase64 } = await res.json();
+        if (cancelPlaybackRef.current) {
+          setIsSpeaking(false);
+          return;
+        }
+        const audio = new Audio(`data:audio/mp3;base64,${audioBase64}`);
+        audio.volume = volumeRef.current;
+        currentAudioRef.current = audio;
+        audio.onended = () => {
+          currentAudioRef.current = null;
+          advance();
+        };
+        audio.onerror = () => {
+          currentAudioRef.current = null;
+          fallbackBrowserTTS(sentence, advance);
+        };
+        if (cancelPlaybackRef.current) {
+          currentAudioRef.current = null;
+          setIsSpeaking(false);
+          return;
+        }
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b4376a79-f653-4c48-8ff8-e5fbe86d419a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VideoTeacher.tsx:audio.play',message:'calling audio.play()',data:{},timestamp:Date.now(),hypothesisId:'E'})}).catch(()=>{});
+        // #endregion
+        await audio.play();
+        return;
+      }
+    } catch {
+      // TTS API failed, use browser
+    }
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b4376a79-f653-4c48-8ff8-e5fbe86d419a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VideoTeacher.tsx:fallbackTTS',message:'using fallbackBrowserTTS',data:{cancelNow:cancelPlaybackRef.current},timestamp:Date.now(),hypothesisId:'C,E'})}).catch(()=>{});
+    // #endregion
+    if (cancelPlaybackRef.current) {
+      setIsSpeaking(false);
+      return;
+    }
+    fallbackBrowserTTS(sentence, advance);
+  }
+
+  function fallbackBrowserTTS(sentence: string, onEnd: () => void, rate?: number) {
+    if (cancelPlaybackRef.current) return;
+    const utterance = new SpeechSynthesisUtterance(sentence);
+    utterance.rate = rate ?? playbackSpeedRef.current;
+    utterance.pitch = 1;
+    utterance.onend = () => onEnd();
+    utterance.onerror = () => onEnd();
+    window.speechSynthesis.speak(utterance);
+  }
+
   useEffect(() => {
+    const onStopAll = () => {
+      if (weAreDispatchersRef.current) {
+        weAreDispatchersRef.current = false;
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b4376a79-f653-4c48-8ff8-e5fbe86d419a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VideoTeacher.tsx:onStopAll',message:'STOP_ALL_VOICE_EVENT weAreDispatcher skip',data:{},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        return;
+      }
+      const skip = skipNextStopAllRef.current;
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b4376a79-f653-4c48-8ff8-e5fbe86d419a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VideoTeacher.tsx:onStopAll',message:'STOP_ALL_VOICE_EVENT received',data:{skip,callingStopOwnPlayback:!skip},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      if (skip) {
+        skipNextStopAllRef.current = false;
+        return;
+      }
+      stopOwnPlayback(true);
+    };
+    window.addEventListener(STOP_ALL_VOICE_EVENT, onStopAll);
     return () => {
+      window.removeEventListener(STOP_ALL_VOICE_EVENT, onStopAll);
       window.speechSynthesis.cancel();
+      const audio = currentAudioRef.current;
+      if (audio) {
+        audio.pause();
+        currentAudioRef.current = null;
+      }
     };
   }, []);
 
-  // Update narration when playing state or sentence index changes
   useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b4376a79-f653-4c48-8ff8-e5fbe86d419a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VideoTeacher.tsx:useEffect(narrate)',message:'narration effect',data:{isPlaying,currentSentenceIndex,sentencesLen:sentences.length,willCall:isPlaying && currentSentenceIndex < sentences.length},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     if (isPlaying && currentSentenceIndex < sentences.length) {
       narrateNextSentence();
     }
@@ -128,21 +280,20 @@ export default function VideoTeacher({
       <div className="flex-1 flex flex-col">
         {/* Video/Avatar Display */}
         <div className="flex-1 bg-black flex items-center justify-center relative">
-          {/* Animated Avatar */}
+          {/* Talking Avatar with mouth animation */}
           <div className="relative">
             <div
               className={`transition-all duration-200 ${
                 isSpeaking ? "scale-105 shadow-purple-500/50" : "scale-100"
               }`}
             >
-              <CustomAvatar
+              <TalkingAvatar
                 name={avatarName}
                 avatarConfig={avatarConfig}
                 size={256}
+                isSpeaking={isSpeaking}
               />
             </div>
-            
-            {/* Speaking Indicator */}
             {isSpeaking && (
               <div className="absolute -bottom-4 left-1/2 transform -translate-x-1/2">
                 <div className="flex gap-1">
@@ -155,14 +306,17 @@ export default function VideoTeacher({
             )}
           </div>
 
-          {/* Current Text Overlay (Subtitles) */}
+          {/* Current Text Overlay (Subtitles) - compact size */}
           {currentText && (
-            <div className="absolute bottom-8 left-0 right-0 px-8">
-              <div className="bg-black/80 backdrop-blur-sm px-6 py-4 rounded-lg max-w-4xl mx-auto">
-                <p className="text-xl text-center leading-relaxed">{currentText}</p>
+            <div className="absolute bottom-6 left-0 right-0 px-6">
+              <div className="bg-black/80 backdrop-blur-sm px-4 py-2 rounded-lg max-w-3xl mx-auto">
+                <p className="text-sm text-center leading-relaxed text-white">{currentText}</p>
               </div>
             </div>
           )}
+
+          {/* Interactive diagram (TED-Ed style) for current section */}
+          <LessonDiagram sectionId={sectionId} topicId={topic === "Neural Networks Basics" ? "neural_networks" : undefined} />
 
           {/* Header with Back Button */}
           <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
@@ -178,8 +332,8 @@ export default function VideoTeacher({
                 </button>
               )}
               <div className="bg-purple-600/90 px-4 py-2 rounded-lg">
-                <p className="font-semibold">🎓 {avatarName}</p>
-                <p className="text-xs text-purple-200">{topic}</p>
+                <p className="font-semibold text-white">🎓 {avatarName}</p>
+                <p className="text-xs text-white/90">{topic}</p>
               </div>
             </div>
           </div>
@@ -195,9 +349,9 @@ export default function VideoTeacher({
                 style={{ width: `${progress}%` }}
               ></div>
             </div>
-            <div className="flex justify-between text-xs text-gray-400 mt-1">
+            <div className="flex justify-between text-xs text-gray-300 mt-1">
               <span>
-                {currentSentenceIndex} / {sentences.length} sections
+                {Math.min(currentSentenceIndex + 1, sentences.length)} / {sentences.length} sections
               </span>
               <span>{Math.round(progress)}%</span>
             </div>
@@ -220,6 +374,12 @@ export default function VideoTeacher({
               <button
                 onClick={() => {
                   window.speechSynthesis.cancel();
+                  const audio = currentAudioRef.current;
+                  if (audio) {
+                    audio.pause();
+                    audio.currentTime = 0;
+                    currentAudioRef.current = null;
+                  }
                   setCurrentSentenceIndex((prev) =>
                     Math.min(prev + 1, sentences.length - 1)
                   );
@@ -231,10 +391,39 @@ export default function VideoTeacher({
               </button>
 
               <div className="flex items-center gap-2">
-                <Volume2 className="w-5 h-5 text-gray-400" />
+                <Volume2 className="w-5 h-5 text-gray-300 shrink-0" />
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={volume}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    setVolume(v);
+                    volumeRef.current = v;
+                    if (currentAudioRef.current) currentAudioRef.current.volume = v;
+                  }}
+                  className="w-20 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                  title="Volume"
+                />
                 <select
                   value={playbackSpeed}
-                  onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}
+                  onChange={(e) => {
+                    cancelPlaybackRef.current = true;
+                    window.speechSynthesis.cancel();
+                    const audio = currentAudioRef.current;
+                    if (audio) {
+                      audio.pause();
+                      audio.currentTime = 0;
+                      currentAudioRef.current = null;
+                    }
+                    const newSpeed = parseFloat(e.target.value);
+                    setPlaybackSpeed(newSpeed);
+                    playbackSpeedRef.current = newSpeed;
+                    setIsSpeaking(false);
+                    setIsPlaying(false);
+                  }}
                   className="bg-gray-700 text-white px-2 py-1 rounded text-sm"
                 >
                   <option value="0.5">0.5x</option>
@@ -247,19 +436,65 @@ export default function VideoTeacher({
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <Settings className="w-5 h-5 text-gray-400" />
-              <span className="text-sm text-gray-400">
-                Teaching Style: {personalityPrompt.slice(0, 30)}...
+            <button
+              type="button"
+              onClick={openTeachingStyleModal}
+              className="flex items-center gap-2 rounded-lg px-2 py-1 text-left hover:bg-gray-700/80 transition-colors"
+              title="Change teaching style"
+            >
+              <Settings className="w-5 h-5 text-gray-300" />
+              <span className="text-sm text-white">
+                Teaching Style: {personalityPrompt.slice(0, 28)}...
               </span>
-            </div>
+            </button>
           </div>
         </div>
+
+        {/* Teaching Style modal */}
+        {teachingStyleOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setTeachingStyleOpen(false)}>
+            <div
+              className="bg-gray-800 rounded-xl shadow-xl max-w-lg w-full p-6 border border-gray-700"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-white">Teaching Style</h3>
+                <button onClick={() => setTeachingStyleOpen(false)} className="p-1 rounded hover:bg-gray-700 text-gray-400">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-sm text-gray-400 mb-2">
+                How should your tutor explain things? (e.g. &quot;Clear and friendly, use sports analogies&quot;)
+              </p>
+              <textarea
+                value={teachingStyleDraft}
+                onChange={(e) => setTeachingStyleDraft(e.target.value)}
+                rows={4}
+                className="w-full px-4 py-3 rounded-lg bg-gray-700 text-white placeholder-gray-500 border border-gray-600 focus:ring-2 focus:ring-purple-500 resize-none"
+                placeholder="e.g. Clear and friendly, use examples..."
+              />
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={saveTeachingStyle}
+                  className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => setTeachingStyleOpen(false)}
+                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Section Info */}
         <div className="bg-gray-800 border-t border-gray-700 p-4">
           <h2 className="text-xl font-bold mb-2">{sectionTitle}</h2>
-          <p className="text-gray-400 text-sm">
+          <p className="text-gray-300 text-sm">
             {sentences.length} segments • Interactive Q&A available in chat →
           </p>
         </div>
@@ -296,7 +531,9 @@ export default function VideoTeacher({
             <LiveChat
               topic={topic}
               section={sectionTitle}
+              sectionContent={sectionContent}
               personalityPrompt={personalityPrompt}
+              voiceId={avatarConfig.voiceId}
             />
           ) : (
             <PracticeQuestion

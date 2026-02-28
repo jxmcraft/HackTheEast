@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { SettingsFormFull } from "./SettingsFormFull";
@@ -6,7 +7,10 @@ import type { AvatarStyle } from "@/components/settings/AvatarCustomizer";
 
 export default async function SettingsPage() {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  if (!supabase) redirect("/login");
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
   const [{ data: prefs }, { data: profile }] = await Promise.all([
@@ -39,6 +43,12 @@ export default async function SettingsPage() {
         canvasApiKey={profile?.canvas_api_key ?? ""}
         lastCanvasSyncAt={profile?.last_canvas_sync_at ?? null}
       />
+      <p className="text-sm text-[var(--muted-foreground)]">
+        <Link href="/studybuddy" className="text-purple-400 hover:text-purple-300 underline">
+          Open StudyBuddy
+        </Link>
+        {" "}to link your avatar and chatbot to this account.
+      </p>
     </main>
   );
 }

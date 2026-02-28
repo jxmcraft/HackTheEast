@@ -1,14 +1,14 @@
 /**
  * Live Chat Component
  * Per PRD Section 2: Live Chat
- * Allows user to type questions and receive AI-generated responses
- * Responses are both displayed and voiced (TTS)
+ * Allows user to type or speak questions and receive AI-generated responses
  */
 
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Send, Play, Pause, Volume2 } from "lucide-react";
+import { Send, Play, Pause, Volume2, Mic, Square } from "lucide-react";
+import { stopAllVoice, STOP_ALL_VOICE_EVENT } from "@/lib/voiceControl";
 
 export interface ChatMessage {
   id: string;
@@ -21,27 +21,52 @@ export interface ChatMessage {
 interface LiveChatProps {
   topic: string;
   section: string;
+  sectionContent?: string;
   personalityPrompt: string;
+  voiceId?: string;
   onSendMessage?: (message: string) => Promise<string>;
 }
+
+const SpeechRecognition =
+  typeof window !== "undefined"
+    ? (window as unknown as { SpeechRecognition?: new () => SpeechRecognition; webkitSpeechRecognition?: new () => SpeechRecognition }).SpeechRecognition ||
+      (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognition }).webkitSpeechRecognition
+    : undefined;
 
 export default function LiveChat({
   topic,
   section,
+  sectionContent = "",
   personalityPrompt,
+  voiceId,
   onSendMessage,
 }: LiveChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const [isListening, setIsListening] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const recognitionRef = useRef<InstanceType<NonNullable<typeof SpeechRecognition>> | null>(null);
 
   // Auto-scroll to latest message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Stop when another component starts voice (e.g. lesson or voice demo)
+  useEffect(() => {
+    const onStopAll = () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      setPlayingAudioId(null);
+    };
+    window.addEventListener(STOP_ALL_VOICE_EVENT, onStopAll);
+    return () => window.removeEventListener(STOP_ALL_VOICE_EVENT, onStopAll);
+  }, []);
 
   // Initialize with greeting
   useEffect(() => {
@@ -81,13 +106,23 @@ export default function LiveChat({
     setIsLoading(true);
 
     try {
-      // Call the provided handler or use a default mock response
       let responseText = "";
       if (onSendMessage) {
         responseText = await onSendMessage(inputValue);
       } else {
-        // Mock response for demo purposes
-        responseText = await generateMockResponse(inputValue, topic, section, personalityPrompt);
+        const res = await fetch("/api/generate/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: inputValue,
+            topic,
+            section,
+            personalityPrompt,
+            sectionContent,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        responseText = data.reply || (await generateMockResponse(inputValue, topic, section, personalityPrompt));
       }
 
       // Add assistant message
@@ -126,29 +161,65 @@ export default function LiveChat({
       return;
     }
 
+    stopAllVoice();
     setPlayingAudioId(messageId);
     try {
-      // In production, call /api/tts endpoint
-      // For now, simulate with Web Speech API or show placeholder
-      const utterance = new SpeechSynthesisUtterance(content);
-      utterance.rate = 1;
-      utterance.pitch = 1;
-      utterance.onend = () => {
-        setPlayingAudioId(null);
-      };
-      window.speechSynthesis.speak(utterance);
-    } catch (error) {
-      console.error("Error playing audio:", error);
-      setPlayingAudioId(null);
+      const res = await fetch("/api/generate/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: content, voice_id: voiceId, speed: 1 }),
+      });
+      if (res.ok) {
+        const { audioBase64 } = await res.json();
+        const audio = new Audio(`data:audio/mp3;base64,${audioBase64}`);
+        audioRef.current = audio;
+        audio.onended = () => setPlayingAudioId(null);
+        audio.onerror = () => setPlayingAudioId(null);
+        await audio.play();
+        return;
+      }
+    } catch {
+      // fallback to browser TTS
     }
+    const utterance = new SpeechSynthesisUtterance(content);
+    utterance.onend = () => setPlayingAudioId(null);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const startVoiceInput = () => {
+    if (!SpeechRecognition) {
+      setInputValue((prev) => prev + (prev ? " " : "") + "(Voice input not supported in this browser. Try Chrome.)");
+      return;
+    }
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      const transcript = Array.from(event.results)
+        .map((r) => r[0].transcript)
+        .join(" ")
+        .trim();
+      if (transcript) setInputValue((prev) => (prev ? `${prev} ${transcript}` : transcript));
+    };
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => setIsListening(false);
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
   };
 
   return (
     <div className="flex flex-col h-full bg-white rounded-lg shadow-lg overflow-hidden">
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white p-4">
-        <h3 className="text-lg font-semibold">Chat with Your Tutor</h3>
-        <p className="text-sm text-purple-100">
+        <h3 className="text-lg font-semibold text-white">Chat with Your Tutor</h3>
+        <p className="text-sm text-white/95">
           Topic: {topic} • Section: {section}
         </p>
       </div>
@@ -156,7 +227,7 @@ export default function LiveChat({
       {/* Messages Container */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
         {messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-gray-500">
+          <div className="flex items-center justify-center h-full text-gray-700">
             <p>No messages yet. Start the conversation!</p>
           </div>
         ) : (
@@ -181,8 +252,8 @@ export default function LiveChat({
                       onClick={() => handlePlayAudio(message.id, message.content)}
                       className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors ${
                         playingAudioId === message.id
-                          ? "bg-purple-100 text-purple-700"
-                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          ? "bg-purple-200 text-purple-900"
+                          : "bg-gray-200 text-gray-800 hover:bg-gray-300"
                       }`}
                       title="Play audio version"
                     >
@@ -202,7 +273,7 @@ export default function LiveChat({
                   </div>
                 )}
 
-                <p className="text-xs mt-1 opacity-70">
+                <p className="text-xs mt-1 text-gray-600 opacity-90">
                   {new Date(message.timestamp).toLocaleTimeString([], {
                     hour: "2-digit",
                     minute: "2-digit",
@@ -220,7 +291,7 @@ export default function LiveChat({
                 <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-100"></div>
                 <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-200"></div>
               </div>
-              <p className="text-xs text-gray-500 mt-2">Tutor is thinking...</p>
+              <p className="text-xs text-gray-700 mt-2">Tutor is thinking...</p>
             </div>
           </div>
         )}
@@ -236,18 +307,28 @@ export default function LiveChat({
             onChange={(e) => setInputValue(e.target.value)}
             placeholder="Ask me a question..."
             disabled={isLoading}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed bg-white text-gray-900 placeholder:text-gray-500"
           />
+          <button
+            type="button"
+            onClick={startVoiceInput}
+            title={isListening ? "Stop listening" : "Voice input"}
+            className={`p-2 rounded-lg transition-colors ${
+              isListening ? "bg-red-500 text-white" : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+            }`}
+          >
+            {isListening ? <Square className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+          </button>
           <button
             type="submit"
             disabled={isLoading || !inputValue.trim()}
             className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
           >
-            <Send className="w-4 h-4" />
+            <Send className="w-5 h-5" />
             <span className="hidden sm:inline">Send</span>
           </button>
         </form>
-        <p className="text-xs text-gray-500 mt-2">
+        <p className="text-xs text-gray-600 mt-2">
           💡 Powered by MiniMax abab6.5 • Voice by MiniMax Speech
         </p>
       </div>

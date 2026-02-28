@@ -13,8 +13,9 @@ import AvatarStudio from "@/components/studybuddy/AvatarStudio";
 import VideoTeacher from "@/components/studybuddy/VideoTeacher";
 import { NEURAL_NETWORKS_TOPIC, getAllSections, getSectionById } from "@/lib/neuralNetworksContent";
 import { getAllPDFLectures, getPDFLectureById } from "@/lib/pdfContent";
-import { getUserData, initializeUser, updateLastSection, getFirstStruggle, clearUserData } from "@/lib/studybuddyStorage";
-import { Play, FileText, Book, UserCog, LogOut } from "lucide-react";
+import { getUserData, initializeUser, updateLastSection, getFirstStruggle, clearUserData, saveUserData } from "@/lib/studybuddyStorage";
+import type { StudyBuddyUser } from "@/lib/studybuddyStorage";
+import { Play, FileText, Book, UserCog, LogOut, Link2, CloudDownload, Loader2 } from "lucide-react";
 
 type PageState = "setup" | "content-selection" | "lesson";
 
@@ -24,6 +25,8 @@ export default function StudyBuddyPage() {
   const [currentSourceType, setCurrentSourceType] = useState<"neural_networks" | "pdf">("neural_networks");
   const [currentPDFId, setCurrentPDFId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [syncStatus, setSyncStatus] = useState<{ linked: boolean; email?: string; data?: StudyBuddyUser | null } | null>(null);
+  const [syncLoading, setSyncLoading] = useState(false);
 
   const sections = getAllSections();
   const pdfLectures = getAllPDFLectures();
@@ -64,6 +67,66 @@ export default function StudyBuddyPage() {
     }
     setIsLoading(false);
   }, []);
+
+  // Fetch account sync status when on content-selection
+  useEffect(() => {
+    if (pageState !== "content-selection") return;
+    let cancelled = false;
+    fetch("/api/studybuddy/sync")
+      .then((r) => r.json())
+      .then((body) => {
+        if (!cancelled) {
+          setSyncStatus({
+            linked: !!body.linked,
+            email: body.email,
+            data: body.data ?? null,
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSyncStatus(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pageState]);
+
+  const handleLinkToAccount = async () => {
+    const user = getUserData();
+    if (!user) return;
+    setSyncLoading(true);
+    try {
+      const res = await fetch("/api/studybuddy/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(user),
+      });
+      const data = await res.json();
+      if (res.ok && data.linked) {
+        setSyncStatus((s) => ({ ...(s ?? {}), linked: true, email: data.email ?? s?.email, data: s?.data }));
+      } else if (res.status === 401) {
+        window.location.href = "/login?next=" + encodeURIComponent("/studybuddy");
+        return;
+      }
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
+  const handleLoadFromAccount = async () => {
+    setSyncLoading(true);
+    try {
+      const res = await fetch("/api/studybuddy/sync");
+      const data = await res.json();
+      if (res.ok && data.data && data.linked) {
+        saveUserData(data.data as StudyBuddyUser);
+        setSyncStatus((s) => ({ ...s!, data: data.data }));
+        window.location.reload();
+      }
+    } finally {
+      setSyncLoading(false);
+    }
+  };
 
   const handleAvatarStudioComplete = (config: { name: string; avatarConfig: Record<string, string>; personalityPrompt: string }) => {
     initializeUser(config.name, config.avatarConfig, config.personalityPrompt);
@@ -139,6 +202,44 @@ export default function StudyBuddyPage() {
             </div>
           )}
 
+          {/* Account sync: link avatar & chatbot to signed-in account */}
+          <div className="bg-white rounded-lg shadow p-4 mb-6 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Link2 className="w-5 h-5 text-purple-600" />
+              <span className="font-medium text-gray-900">Account sync</span>
+              {syncStatus?.linked && syncStatus.email && (
+                <span className="text-sm text-gray-600">Linked as {syncStatus.email}</span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {syncStatus?.linked !== undefined && (
+                <>
+                  <button
+                    onClick={handleLinkToAccount}
+                    disabled={syncLoading}
+                    className="flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {syncLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+                    {syncStatus.linked ? "Update account with current profile" : "Link to account"}
+                  </button>
+                  {syncStatus.data && (
+                    <button
+                      onClick={handleLoadFromAccount}
+                      disabled={syncLoading}
+                      className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {syncLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CloudDownload className="w-4 h-4" />}
+                      Load from account
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+            <p className="text-xs text-gray-600 w-full">
+              Sign in at Settings or Sync Dashboard, then link to save your avatar and chatbot to your account.
+            </p>
+          </div>
+
           {/* Neural Networks Topic */}
           <div className="mb-8">
             <div className="bg-white rounded-lg shadow-lg p-6 mb-4">
@@ -198,7 +299,7 @@ export default function StudyBuddyPage() {
                       <h3 className="text-lg font-semibold text-gray-900 mb-1">
                         {pdfLecture.title}
                       </h3>
-                      <p className="text-xs text-gray-500">{pdfLecture.source}</p>
+                      <p className="text-xs text-gray-600">{pdfLecture.source}</p>
                     </div>
                     <FileText className="w-5 h-5 text-blue-600" />
                   </div>
@@ -216,7 +317,7 @@ export default function StudyBuddyPage() {
                           <Play className="w-4 h-4 text-blue-400 group-hover:text-blue-600" />
                         </div>
                         {section.pageNumbers && (
-                          <span className="text-xs text-gray-500">{section.pageNumbers}</span>
+                          <span className="text-xs text-gray-600">{section.pageNumbers}</span>
                         )}
                       </button>
                     ))}
@@ -227,7 +328,7 @@ export default function StudyBuddyPage() {
           </div>
 
           {/* Attribution */}
-          <div className="mt-8 text-center text-sm text-gray-500">
+          <div className="mt-8 text-center text-sm text-gray-600">
             <p>Powered by MiniMax abab6.5 • Voice by MiniMax Speech</p>
           </div>
         </div>

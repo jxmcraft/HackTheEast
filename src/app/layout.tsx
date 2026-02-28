@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { Header } from "@/components/layout/Header";
+import PersistentStudyBuddyAvatar from "@/components/studybuddy/PersistentStudyBuddyAvatar";
 
 export const metadata: Metadata = {
   title: "HTE – Sync Dashboard",
@@ -19,6 +20,7 @@ export default function RootLayout({
         <AuthProvider>
           <Header />
           {children}
+          <PersistentStudyBuddyAvatar />
         </AuthProvider>
       </body>
     </html>

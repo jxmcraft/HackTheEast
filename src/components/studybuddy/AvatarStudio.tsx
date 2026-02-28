@@ -10,6 +10,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { createAvatar } from "@dicebear/core";
 import { personas } from "@dicebear/collection";
 import { getUserData } from "@/lib/studybuddyStorage";
+import { stopAllVoice, STOP_ALL_VOICE_EVENT } from "@/lib/voiceControl";
 
 /** Personas customization options */
 const BODY_OPTIONS = [
@@ -117,6 +118,25 @@ const AVATAR_STYLES = [
   { value: "neon", label: "Neon Cyberpunk", emoji: "🌃" },
 ];
 
+/** MiniMax TTS voice options (at least 10). Click to play demo. */
+const VOICE_OPTIONS = [
+  { value: "English_expressive_narrator", label: "Expressive Narrator" },
+  { value: "English_radiant_girl", label: "Radiant Girl" },
+  { value: "English_magnetic_voiced_man", label: "Magnetic Man" },
+  { value: "English_compelling_lady1", label: "Compelling Lady" },
+  { value: "English_captivating_female1", label: "Captivating Female" },
+  { value: "English_Upbeat_Woman", label: "Upbeat Woman" },
+  { value: "English_Trustworth_Man", label: "Trustworthy Man" },
+  { value: "English_CalmWoman", label: "Calm Woman" },
+  { value: "English_Gentle-voiced_man", label: "Gentle Man" },
+  { value: "English_Graceful_Lady", label: "Graceful Lady" },
+  { value: "English_PlayfulGirl", label: "Playful Girl" },
+  { value: "English_FriendlyPerson", label: "Friendly Person" },
+  { value: "English_Steadymentor", label: "Steady Mentor" },
+  { value: "English_CaptivatingStoryteller", label: "Storyteller" },
+  { value: "English_ConfidentWoman", label: "Confident Woman" },
+];
+
 const DEFAULT_AVATAR_CONFIG = {
   body: "rounded",
   hair: "long",
@@ -131,6 +151,7 @@ const DEFAULT_AVATAR_CONFIG = {
   avatarSource: "generated",
   customImageUrl: "",
   customStyle: "anime",
+  voiceId: "English_expressive_narrator",
 };
 
 export interface AvatarConfig {
@@ -212,7 +233,9 @@ export default function AvatarStudio({
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [styleLoading, setStyleLoading] = useState(false);
   const [styleError, setStyleError] = useState<string | null>(null);
+  const [playingVoiceDemo, setPlayingVoiceDemo] = useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const demoAudioRef = React.useRef<HTMLAudioElement | null>(null);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -249,6 +272,16 @@ export default function AvatarStudio({
       localStorage.setItem("studybuddy_user", JSON.stringify(userData));
     }
   }, [name, avatarConfig, personalityPrompt, isLoading]);
+
+  useEffect(() => {
+    const onStopAll = () => {
+      demoAudioRef.current?.pause();
+      demoAudioRef.current = null;
+      setPlayingVoiceDemo(null);
+    };
+    window.addEventListener(STOP_ALL_VOICE_EVENT, onStopAll);
+    return () => window.removeEventListener(STOP_ALL_VOICE_EVENT, onStopAll);
+  }, []);
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setName(e.target.value);
@@ -341,6 +374,37 @@ export default function AvatarStudio({
       }
     } finally {
       setStyleLoading(false);
+    }
+  };
+
+  const playVoiceDemo = async (voiceId: string) => {
+    const displayName = name.trim() || "your tutor";
+    const demoText = `Hi, I am ${displayName}. Looking forward to work with you closely in the future.`;
+    if (playingVoiceDemo) {
+      demoAudioRef.current?.pause();
+      setPlayingVoiceDemo(null);
+      if (playingVoiceDemo === voiceId) return;
+    }
+    stopAllVoice();
+    setPlayingVoiceDemo(voiceId);
+    try {
+      const res = await fetch("/api/generate/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: demoText, voice_id: voiceId, speed: 1 }),
+      });
+      if (!res.ok) {
+        setPlayingVoiceDemo(null);
+        return;
+      }
+      const { audioBase64 } = await res.json();
+      const audio = new Audio(`data:audio/mp3;base64,${audioBase64}`);
+      demoAudioRef.current = audio;
+      audio.onended = () => setPlayingVoiceDemo(null);
+      audio.onerror = () => setPlayingVoiceDemo(null);
+      await audio.play();
+    } catch {
+      setPlayingVoiceDemo(null);
     }
   };
 
@@ -590,6 +654,35 @@ export default function AvatarStudio({
                 rows={4}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white text-gray-900 placeholder:text-gray-600 resize-none"
               />
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-4 space-y-3">
+              <h3 className="font-semibold text-gray-900">Tutor voice</h3>
+              <p className="text-xs text-gray-700">Choose a voice and click to hear a demo.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                {VOICE_OPTIONS.map((v) => (
+                  <button
+                    key={v.value}
+                    type="button"
+                    onClick={() => {
+                      handleAvatarChange("voiceId", v.value);
+                      playVoiceDemo(v.value);
+                    }}
+                    className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors ${
+                      (avatarConfig.voiceId || DEFAULT_AVATAR_CONFIG.voiceId) === v.value
+                        ? "bg-purple-600 text-white"
+                        : "bg-gray-100 text-gray-900 hover:bg-gray-200"
+                    }`}
+                  >
+                    <span>{v.label}</span>
+                    {playingVoiceDemo === v.value ? (
+                      <span className="text-xs animate-pulse">Playing...</span>
+                    ) : (
+                      <span className="text-xs opacity-80">Demo</span>
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <button
