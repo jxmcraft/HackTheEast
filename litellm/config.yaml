@@ -5,14 +5,12 @@
 # Run: bun run proxy (in one terminal); bun dev (in another).
 # Default port: 4000. Set LITELLM_EMBEDDING_API_BASE=http://localhost:4000 in env.
 #
-# Proxy env (no OpenAI connection – keys are used only for Minimax/Featherless):
-#   When you run "bun run proxy", keys are loaded from .env and .env.local in the project root.
-#   For minimax-embed set: MINIMAX_API_KEY, MINIMAX_GROUP_ID, and OPENAI_API_KEY=$MINIMAX_API_KEY
-#   For featherless-embed set: FEATHERLESS_API_KEY and OPENAI_API_KEY=$FEATHERLESS_API_KEY
-#   (OPENAI_API_KEY is required by LiteLLM's internal client; requests still go to api_base above.)
+# Proxy env (no OpenAI connection – keys are loaded when you run "bun run proxy"):
+#   For minimax-embed: MINIMAX_API_KEY, MINIMAX_GROUP_ID, OPENAI_API_KEY=$MINIMAX_API_KEY
+#   For featherless-embed: FEATHERLESS_API_KEY, OPENAI_API_KEY=$FEATHERLESS_API_KEY
 
 model_list:
-  # Minimax embedding (embo-01) – requests go to Minimax only
+  # Minimax embedding (embo-01)
   - model_name: minimax-embed
     litellm_params:
       model: openai/embo-01
@@ -21,7 +19,7 @@ model_list:
     model_info:
       mode: embedding
 
-  # Featherless embedding – requests go to Featherless only
+  # Featherless embedding (OpenAI-compatible; api_base points to Featherless)
   - model_name: featherless-embed
     litellm_params:
       model: openai/text-embedding-3-small

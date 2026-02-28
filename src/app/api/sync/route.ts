@@ -102,7 +102,7 @@ export async function POST() {
     const credentials = await getCanvasCredentialsFromProfile();
     if (!credentials?.baseUrl || !credentials?.token) {
       return NextResponse.json(
-        { error: "Canvas credentials not configured. Set Canvas API URL and token in Settings." },
+        { error: "Canvas credentials are not configured. Set the Canvas API URL and token in Settings." },
         { status: 400 }
       );
     }
@@ -212,28 +212,47 @@ export async function POST() {
               currentCourseMaterials: 0,
               currentCourseChunks: 0,
             });
+            let currentCourseMaterials = 0;
+            let currentCourseChunks = 0;
             try {
-              const materials = await ingestCourseMaterials(
+              await ingestCourseMaterials(
                 String(c.id),
                 credentialsCopy.token!,
-                credentialsCopy.baseUrl!
+                credentialsCopy.baseUrl!,
+                {
+                  onItemRead: (msg, idx, total) => {
+                    void updateSyncProgress(serviceSupabase, user.id, {
+                      message: `Ingesting ${c.name}: ${msg} (${idx + 1}/${total})`,
+                    });
+                  },
+                  onMaterialIngested: async (material) => {
+                    const prevM = totalMaterialsStored;
+                    const prevC = totalChunksCreated;
+                    const { materialsStored, chunksCreated } = await storeCourseMaterials(courseUuid, [material], {
+                      supabase: serviceSupabase,
+                      onProgress: (mCurr, cCurr) => {
+                        void updateSyncProgress(serviceSupabase, user.id, {
+                          materialsStored: prevM + mCurr,
+                          chunksCreated: prevC + cCurr,
+                          currentCourseMaterials: mCurr,
+                          currentCourseChunks: cCurr,
+                        });
+                      },
+                    });
+                    totalMaterialsStored += materialsStored;
+                    totalChunksCreated += chunksCreated;
+                    currentCourseMaterials += materialsStored;
+                    currentCourseChunks += chunksCreated;
+                    await updateSyncProgress(serviceSupabase, user.id, {
+                      materialsStored: totalMaterialsStored,
+                      chunksCreated: totalChunksCreated,
+                      currentCourseMaterials,
+                      currentCourseChunks,
+                    });
+                  },
+                }
               );
-              const prevM = totalMaterialsStored;
-              const prevC = totalChunksCreated;
-              const { materialsStored, chunksCreated } = await storeCourseMaterials(courseUuid, materials, {
-                supabase: serviceSupabase,
-                onProgress: (mCurr, cCurr) => {
-                  void updateSyncProgress(serviceSupabase, user.id, {
-                    materialsStored: prevM + mCurr,
-                    chunksCreated: prevC + cCurr,
-                    currentCourseMaterials: mCurr,
-                    currentCourseChunks: cCurr,
-                  });
-                },
-              });
-              totalMaterialsStored += materialsStored;
-              totalChunksCreated += chunksCreated;
-              ingestResults.push({ courseId: c.id, materialsStored, chunksCreated });
+              ingestResults.push({ courseId: c.id, materialsStored: currentCourseMaterials, chunksCreated: currentCourseChunks });
               await updateSyncProgress(serviceSupabase, user.id, {
                 materialsStored: totalMaterialsStored,
                 chunksCreated: totalChunksCreated,
@@ -265,7 +284,7 @@ export async function POST() {
         }
       })();
       return NextResponse.json(
-        { jobId: startedAt, message: "Sync started in background. Poll GET /api/sync/status for progress." },
+        { jobId: startedAt, message: "Sync started in the background. Poll GET /api/sync/status for progress." },
         { status: 202 }
       );
     }
@@ -289,27 +308,47 @@ export async function POST() {
         currentCourseMaterials: 0,
         currentCourseChunks: 0,
       });
+      let currentCourseMaterials = 0;
+      let currentCourseChunks = 0;
       try {
-        const materials = await ingestCourseMaterials(
+        await ingestCourseMaterials(
           String(c.id),
           credentials.token!,
-          credentials.baseUrl!
+          credentials.baseUrl!,
+          {
+            onItemRead: (msg, idx, total) => {
+              void updateSyncProgress(supabase, user.id, {
+                message: `Ingesting ${c.name}: ${msg} (${idx + 1}/${total})`,
+              });
+            },
+            onMaterialIngested: async (material) => {
+              const prevM = totalMaterialsStored;
+              const prevC = totalChunksCreated;
+              const { materialsStored, chunksCreated } = await storeCourseMaterials(courseUuid, [material], {
+                supabase,
+                onProgress: (mCurr, cCurr) => {
+                  void updateSyncProgress(supabase, user.id, {
+                    materialsStored: prevM + mCurr,
+                    chunksCreated: prevC + cCurr,
+                    currentCourseMaterials: mCurr,
+                    currentCourseChunks: cCurr,
+                  });
+                },
+              });
+              totalMaterialsStored += materialsStored;
+              totalChunksCreated += chunksCreated;
+              currentCourseMaterials += materialsStored;
+              currentCourseChunks += chunksCreated;
+              await updateSyncProgress(supabase, user.id, {
+                materialsStored: totalMaterialsStored,
+                chunksCreated: totalChunksCreated,
+                currentCourseMaterials,
+                currentCourseChunks,
+              });
+            },
+          }
         );
-        const prevM = totalMaterialsStored;
-        const prevC = totalChunksCreated;
-        const { materialsStored, chunksCreated } = await storeCourseMaterials(courseUuid, materials, {
-          onProgress: (mCurr, cCurr) => {
-            void updateSyncProgress(supabase, user.id, {
-              materialsStored: prevM + mCurr,
-              chunksCreated: prevC + cCurr,
-              currentCourseMaterials: mCurr,
-              currentCourseChunks: cCurr,
-            });
-          },
-        });
-        totalMaterialsStored += materialsStored;
-        totalChunksCreated += chunksCreated;
-        ingestResults.push({ courseId: c.id, materialsStored, chunksCreated });
+        ingestResults.push({ courseId: c.id, materialsStored: currentCourseMaterials, chunksCreated: currentCourseChunks });
         await updateSyncProgress(supabase, user.id, {
           materialsStored: totalMaterialsStored,
           chunksCreated: totalChunksCreated,

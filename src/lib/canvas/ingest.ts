@@ -1,6 +1,7 @@
 /**
  * Canvas data ingestion for AI Study Companion.
- * Fetches courses, modules, module items, pages, and files; extracts text for embedding.
+ * Fetches courses, then all modules (Canvas “tabs”) and every module item. For each item we fetch
+ * page body, assignment descriptions, and file content (PDF/PPTX); extract text for embedding.
  * Follows links in Canvas pages/assignments and recursively scans linked websites for content.
  * Does NOT write to the database — returns materials for storeCourseMaterials().
  */
@@ -221,44 +222,76 @@ function linkedPageCanvasId(courseId: string, url: string): string {
 
 /**
  * Ingest course materials from Canvas for a single course.
- * Fetches modules and items, then pulls page body and assignment descriptions.
+ * Iterates over all Canvas modules (tabs) and all module items, then fetches page body,
+ * assignment descriptions, and file content (PDF/PPTX) for embedding.
  * Returns an array of material objects ready for embedding/storage (no DB write).
+ * Optional onItemRead(message, itemIndex, itemTotal) is called for each item read (front page, page, file, assignment) so the UI can show progress.
+ * Optional onMaterialIngested(material) is called after each material is added; if provided and async, ingest waits for it so you can store each material immediately.
  */
 export async function ingestCourseMaterials(
   courseId: string,
   accessToken: string,
-  baseUrl: string
+  baseUrl: string,
+  options?: {
+    onItemRead?: (message: string, itemIndex: number, itemTotal: number) => void;
+    onMaterialIngested?: (material: IngestedMaterial) => void | Promise<void>;
+  }
 ): Promise<IngestedMaterial[]> {
   const client = new CanvasAPIClient(baseUrl, accessToken);
   const materials: IngestedMaterial[] = [];
   const seenIds = new Set<string>();
 
-  function addMaterial(
+  async function addMaterial(
     canvas_item_id: string,
     content_type: IngestedMaterial["content_type"],
     content_text: string,
     metadata: IngestedMaterial["metadata"]
-  ) {
+  ): Promise<void> {
     const key = canvas_item_id;
     if (seenIds.has(key) || !content_text.trim()) return;
     seenIds.add(key);
-    materials.push({
+    const material: IngestedMaterial = {
       canvas_item_id,
       content_type,
       content_text: content_text.trim(),
       metadata,
-    });
+    };
+    materials.push(material);
+    await options?.onMaterialIngested?.(material);
   }
 
   const modules = await client.getCourseModules(courseId);
+
+  // Count total items we will report progress for: front page (if any) + each Page/Assignment/File in every module.
+  let itemTotal = 0;
+  try {
+    const frontPage = await client.getFrontPage(courseId);
+    if (frontPage?.body != null) itemTotal += 1;
+  } catch {
+    // ignore
+  }
+  for (const mod of modules) {
+    const items =
+      mod.items && mod.items.length > 0
+        ? mod.items
+        : await client.getModuleItems(courseId, mod.id);
+    itemTotal += items.filter((i) => ["Page", "Assignment", "File"].includes(i.type)).length;
+  }
+
+  let itemIndex = 0;
+  const report = (message: string) => {
+    options?.onItemRead?.(message, itemIndex, itemTotal);
+    itemIndex += 1;
+  };
 
   // Ingest course front page first (and all its links recursively)
   try {
     const frontPage = await client.getFrontPage(courseId);
     if (frontPage?.body != null) {
+      report("Reading front page");
       const text = extractTextFromHTML(frontPage.body);
       if (text) {
-        addMaterial(
+        await addMaterial(
           `front-page-${courseId}-${frontPage.page_id ?? "front"}`,
           "page",
           text,
@@ -278,7 +311,7 @@ export async function ingestCourseMaterials(
         try {
           const linkedPages = await crawlLinkedPages(frontLinks, { maxPages: 25, maxDepth: 2 });
           for (const lp of linkedPages) {
-            addMaterial(
+            await addMaterial(
               linkedPageCanvasId(courseId, lp.url),
               "page",
               lp.text,
@@ -317,9 +350,10 @@ export async function ingestCourseMaterials(
         if (item.type === "Page" && (item.page_url ?? item.content_id)) {
           const pageId = item.page_url ?? String(item.content_id!);
           const page = await client.getPage(courseId, pageId);
+          report(`Reading page: ${page.title ?? item.title}`);
           const text = extractTextFromHTML(page.body ?? "");
           if (text) {
-            addMaterial(
+            await addMaterial(
               `page-${courseId}-${page.page_id ?? pageId}`,
               "page",
               text,
@@ -343,7 +377,7 @@ export async function ingestCourseMaterials(
                 maxDepth: 2,
               });
               for (const lp of linkedPages) {
-                addMaterial(
+                await addMaterial(
                   linkedPageCanvasId(courseId, lp.url),
                   "page",
                   lp.text,
@@ -365,9 +399,10 @@ export async function ingestCourseMaterials(
           }
         } else if (item.type === "Assignment" && item.content_id) {
           const assignment = await client.getAssignment(courseId, item.content_id);
+          report(`Reading assignment: ${assignment.name}`);
           const text = extractTextFromHTML(assignment.description ?? "");
           if (text) {
-            addMaterial(
+            await addMaterial(
               `assignment-${courseId}-${assignment.id}`,
               "assignment",
               text,
@@ -390,7 +425,7 @@ export async function ingestCourseMaterials(
                 maxDepth: 2,
               });
               for (const lp of linkedPages) {
-                addMaterial(
+                await addMaterial(
                   linkedPageCanvasId(courseId, lp.url),
                   "page",
                   lp.text,
@@ -413,6 +448,7 @@ export async function ingestCourseMaterials(
         } else if (item.type === "File" && item.content_id) {
           const file = await client.getFile(courseId, item.content_id);
           const title = file.display_name ?? file.filename ?? item.title;
+          report(`Reading file: ${title}`);
           const isPdf = /\.pdf$/i.test(file.filename ?? "") || /\.pdf$/i.test(file.url ?? "");
           const isPptx = /\.pptx$/i.test(file.filename ?? "") || /\.pptx$/i.test(file.url ?? "");
           let contentText = title;
@@ -426,7 +462,7 @@ export async function ingestCourseMaterials(
               console.warn(`Failed to extract PDF/PPTX for file ${file.id}:`, e instanceof Error ? e.message : e);
             }
           }
-          addMaterial(
+          await addMaterial(
             `file-${courseId}-${file.id}`,
             "file",
             contentText,

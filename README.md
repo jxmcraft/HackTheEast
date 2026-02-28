@@ -16,7 +16,7 @@ Next.js 14 (App Router) + TypeScript + Tailwind CSS + Supabase. Syncs courses, c
 
    - **Supabase:** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (from [Supabase](https://supabase.com) project settings). For **background sync** (sync runs without blocking the UI), also set `SUPABASE_SERVICE_ROLE_KEY` (Project Settings → API → service_role secret).
    - **Canvas:** Set per user in **Settings** (Canvas API URL and Access Token); no env vars.
-   - **LiteLLM (embeddings):** `LITELLM_EMBEDDING_API_BASE=http://localhost:4000`, `LITELLM_EMBEDDING_API_KEY=sk-1234`, `LITELLM_EMBEDDING_MODEL=minimax-embed` (or `featherless-embed`). Minimax and Featherless credentials are set only in the proxy’s environment
+   - **LiteLLM (embeddings):** `LITELLM_EMBEDDING_API_BASE=http://localhost:4000`, `LITELLM_EMBEDDING_API_KEY=sk-1234`, `LITELLM_EMBEDDING_MODEL=minimax-embed`. Minimax credentials are set in the proxy’s environment; Featherless is chat-only (no embeddings API).
 
 3. **Supabase schema**
 
@@ -39,7 +39,7 @@ Next.js 14 (App Router) + TypeScript + Tailwind CSS + Supabase. Syncs courses, c
    - Next.js: [http://localhost:3000](http://localhost:3000)
    - LiteLLM proxy: http://localhost:4000
 
-   Set LiteLLM vars in your env: `LITELLM_EMBEDDING_API_BASE=http://localhost:4000`, `LITELLM_EMBEDDING_API_KEY=sk-1234` (match `master_key` in `litellm/config.yaml`), `LITELLM_EMBEDDING_MODEL=minimax-embed` (or `featherless-embed`). Put proxy keys in `.env` or `.env.local` (they are loaded when you run `bun run proxy`; no OpenAI connection – traffic goes only to Minimax/Featherless): for **minimax-embed** set `MINIMAX_API_KEY`, `MINIMAX_GROUP_ID`, and `OPENAI_API_KEY` (same value as `MINIMAX_API_KEY`); for **featherless-embed** set `FEATHERLESS_API_KEY` and `OPENAI_API_KEY` (same as `FEATHERLESS_API_KEY`). See `litellm/config.yaml` for details.
+   Set LiteLLM vars in your env: `LITELLM_EMBEDDING_API_BASE=http://localhost:4000`, `LITELLM_EMBEDDING_API_KEY=sk-1234` (match `master_key` in `litellm/config.yaml`), `LITELLM_EMBEDDING_MODEL=minimax-embed`. For the proxy (run `bun run proxy`): set `MINIMAX_API_KEY`, `MINIMAX_GROUP_ID`, and `OPENAI_API_KEY` (same as `MINIMAX_API_KEY`) so embeddings work. See `litellm/config.yaml` for details.
 
    **Test embeddings:** With app and proxy running, open http://localhost:3000/api/embedding-test. You should get `{ "ok": true, "dimensions": 1536, ... }` when configured correctly.
 

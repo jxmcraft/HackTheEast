@@ -63,7 +63,7 @@ export async function startSyncProgress(
       sync_chunks_created: 0,
       sync_current_course_materials: 0,
       sync_current_course_chunks: 0,
-      sync_message: "Starting sync…",
+      sync_message: "Starting sync.",
       sync_error: null,
       sync_result: null,
     })
@@ -84,7 +84,7 @@ export async function resumeSyncProgress(
       sync_phase: "ingest",
       sync_course_index: fromCourseIndex,
       sync_course_total: courseTotal,
-      sync_message: "Resuming sync…",
+      sync_message: "Resuming sync.",
       sync_error: null,
     })
     .eq("id", userId);
@@ -131,7 +131,7 @@ export async function completeSyncProgress(
       sync_status: "completed",
       sync_completed_at: now,
       sync_phase: "done",
-      sync_message: "Sync complete",
+      sync_message: "Sync complete.",
       sync_error: null,
       sync_result: result as unknown as Record<string, unknown>,
     })

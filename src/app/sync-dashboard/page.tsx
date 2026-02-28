@@ -127,6 +127,101 @@ export default function SyncDashboardPage() {
     loadStoredSync();
   }, []);
 
+  /** Poll sync status and update UI; call again if still running. Used after starting sync or when reconnecting after reload. */
+  function pollSyncStatus() {
+    fetch("/api/sync/status")
+      .then((statusRes) => statusRes.text())
+      .then((statusText) => {
+        let statusData: {
+          status?: string;
+          phase?: string;
+          courseIndex?: number;
+          courseTotal?: number;
+          materialsStored?: number;
+          chunksCreated?: number;
+          currentCourseMaterials?: number;
+          currentCourseChunks?: number;
+          message?: string;
+          error?: string;
+        };
+        try {
+          statusData = JSON.parse(statusText) as typeof statusData;
+        } catch {
+          statusData = {};
+        }
+        if (statusData.status === "running") {
+          setSyncProgress({
+            phase: statusData.phase ?? "ingest",
+            courseIndex: statusData.courseIndex ?? 0,
+            courseTotal: statusData.courseTotal ?? 0,
+            materialsStored: statusData.materialsStored,
+            chunksCreated: statusData.chunksCreated,
+            currentCourseMaterials: statusData.currentCourseMaterials,
+            currentCourseChunks: statusData.currentCourseChunks,
+            message: statusData.message,
+          });
+          setLoading("syncing");
+          setTimeout(pollSyncStatus, 1500);
+          return;
+        }
+        if (statusData.status === "completed") {
+          setSyncProgress(null);
+          setLoading("idle");
+          loadStoredSync();
+          loadProfile();
+          return;
+        }
+        if (statusData.status === "failed") {
+          setError(statusData.error ?? "Sync failed");
+          setSyncProgress(null);
+          setLoading("idle");
+          return;
+        }
+        setSyncProgress(null);
+        setLoading("idle");
+        loadStoredSync();
+        loadProfile();
+      })
+      .catch(() => {
+        setSyncProgress(null);
+        setLoading("idle");
+        loadStoredSync();
+        loadProfile();
+      });
+  }
+
+  /** On load: if a sync is already in progress, show progress and resume polling. */
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/sync/status")
+      .then((res) => (res.ok ? res.text() : null))
+      .then((text) => {
+        if (cancelled || !text) return;
+        let data: { status?: string; phase?: string; courseIndex?: number; courseTotal?: number; materialsStored?: number; chunksCreated?: number; currentCourseMaterials?: number; currentCourseChunks?: number; message?: string };
+        try {
+          data = JSON.parse(text) as typeof data;
+        } catch {
+          return;
+        }
+        if (data.status === "running") {
+          setLoading("syncing");
+          setSyncProgress({
+            phase: data.phase ?? "ingest",
+            courseIndex: data.courseIndex ?? 0,
+            courseTotal: data.courseTotal ?? 0,
+            materialsStored: data.materialsStored,
+            chunksCreated: data.chunksCreated,
+            currentCourseMaterials: data.currentCourseMaterials,
+            currentCourseChunks: data.currentCourseChunks,
+            message: data.message,
+          });
+          setTimeout(pollSyncStatus, 500);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   const syncAll = async () => {
     setLoading("syncing");
     setError(null);
@@ -150,57 +245,8 @@ export default function SyncDashboardPage() {
 
       if (res.status === 202 && data.jobId) {
         willPoll = true;
-        setSyncProgress({ phase: "starting", courseIndex: 0, courseTotal: 0, message: "Starting sync…" });
-        const pollStatus = async () => {
-          const statusRes = await fetch("/api/sync/status");
-          const statusText = await statusRes.text();
-          if (!statusRes.ok) {
-            setSyncProgress(null);
-            setLoading("idle");
-            await loadStoredSync();
-            await loadProfile();
-            return;
-          }
-          let statusData: { status?: string; phase?: string; courseIndex?: number; courseTotal?: number; materialsStored?: number; chunksCreated?: number; currentCourseMaterials?: number; currentCourseChunks?: number; message?: string; error?: string };
-          try {
-            statusData = JSON.parse(statusText) as typeof statusData;
-          } catch {
-            statusData = {};
-          }
-          if (statusData.status === "running") {
-            setSyncProgress({
-              phase: statusData.phase ?? "ingest",
-              courseIndex: statusData.courseIndex ?? 0,
-              courseTotal: statusData.courseTotal ?? 0,
-              materialsStored: statusData.materialsStored,
-              chunksCreated: statusData.chunksCreated,
-              currentCourseMaterials: statusData.currentCourseMaterials,
-              currentCourseChunks: statusData.currentCourseChunks,
-              message: statusData.message,
-            });
-            setTimeout(pollStatus, 1500);
-            return;
-          }
-          if (statusData.status === "completed") {
-            setSyncProgress(null);
-            setLoading("idle");
-            await loadStoredSync();
-            await loadProfile();
-            return;
-          }
-          if (statusData.status === "failed") {
-            setError(statusData.error ?? "Sync failed");
-            setSyncProgress(null);
-            setLoading("idle");
-            return;
-          }
-          // idle or unknown: stop polling
-          setSyncProgress(null);
-          setLoading("idle");
-          await loadStoredSync();
-          await loadProfile();
-        };
-        setTimeout(pollStatus, 500);
+        setSyncProgress({ phase: "starting", courseIndex: 0, courseTotal: 0, message: "Starting sync." });
+        setTimeout(pollSyncStatus, 500);
         return;
       }
 
@@ -336,7 +382,7 @@ export default function SyncDashboardPage() {
               <Loader2 className="h-5 w-5 shrink-0 animate-spin text-[var(--muted-foreground)]" />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium">
-                  {syncProgress?.message ?? "Syncing…"}
+                  {syncProgress?.message ?? "Syncing."}
                 </p>
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-[var(--muted-foreground)]">
                   {syncProgress && syncProgress.courseTotal > 0 && (
@@ -344,16 +390,16 @@ export default function SyncDashboardPage() {
                   )}
                   {((syncProgress?.currentCourseMaterials ?? 0) > 0 || (syncProgress?.currentCourseChunks ?? 0) > 0) && (
                     <span>
-                      This course: {(syncProgress?.currentCourseMaterials ?? 0)} materials, {(syncProgress?.currentCourseChunks ?? 0)} chunks
+                      This course: {(syncProgress?.currentCourseMaterials ?? 0)} materials, {(syncProgress?.currentCourseChunks ?? 0)} chunks.
                     </span>
                   )}
                   {((syncProgress?.materialsStored ?? 0) > 0 || (syncProgress?.chunksCreated ?? 0) > 0) && (
                     <span>
-                      Total: {(syncProgress?.materialsStored ?? 0)} materials, {(syncProgress?.chunksCreated ?? 0)} chunks
+                      Total: {(syncProgress?.materialsStored ?? 0)} materials, {(syncProgress?.chunksCreated ?? 0)} chunks.
                     </span>
                   )}
                   {(!syncProgress || syncProgress.courseTotal === 0) && (syncProgress?.materialsStored ?? 0) === 0 && (syncProgress?.chunksCreated ?? 0) === 0 && (
-                    <span>Fetching courses and ingesting materials…</span>
+                    <span>Fetching courses and ingesting materials.</span>
                   )}
                 </div>
                 <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--muted)]">
@@ -396,7 +442,7 @@ export default function SyncDashboardPage() {
         <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
           <h2 className="mb-2 text-lg font-semibold">What would you like to learn today?</h2>
           <p className="mb-4 text-sm text-[var(--muted-foreground)]">
-            Start a new lesson to study a topic from your courses.
+            Start a new lesson to study a topic from your synced courses.
           </p>
           <button
             onClick={() => setShowNewLesson(true)}
@@ -474,7 +520,7 @@ export default function SyncDashboardPage() {
               {courses.length === 0 && !loading && (
                 <TableRow>
                   <TableCell colSpan={3} className="text-center text-[var(--muted-foreground)]">
-                    No courses. Click Sync above to load.
+                    No courses yet. Click Sync to load your courses from Canvas.
                   </TableCell>
                 </TableRow>
               )}
@@ -509,7 +555,7 @@ export default function SyncDashboardPage() {
               {assignments.length === 0 && !loading && (
                 <TableRow>
                   <TableCell colSpan={4} className="text-center text-[var(--muted-foreground)]">
-                    No assignments. Click Sync above to load.
+                    No assignments yet. Click Sync to load assignments from Canvas.
                   </TableCell>
                 </TableRow>
               )}

@@ -48,7 +48,7 @@ export async function GET() {
 
     return NextResponse.json(response);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Status check failed";
+    const message = err instanceof Error ? err.message : "Failed to retrieve sync status.";
     console.error("[GET /api/sync/status]", err);
     return NextResponse.json({ status: "idle", error: message }, { status: 500 });
   }

@@ -22,7 +22,7 @@ export async function GET() {
     const credentials = await getCanvasCredentialsFromProfile();
     if (!credentials?.baseUrl || !credentials?.token) {
       return NextResponse.json(
-        { error: "Canvas credentials not configured. Set Canvas API URL and token in Settings." },
+        { error: "Canvas credentials are not configured. Set the Canvas API URL and token in Settings." },
         { status: 400 }
       );
     }
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
 
     if (!courseId || !accessToken) {
       return NextResponse.json(
-        { error: "Missing courseId or accessToken in request body" },
+        { error: "Missing courseId or accessToken in the request body." },
         { status: 400 }
       );
     }
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
       baseUrl = credentials?.baseUrl;
       if (!baseUrl) {
         return NextResponse.json(
-          { error: "Missing baseUrl. Provide baseUrl in body or set Canvas API URL in Settings." },
+          { error: "Missing baseUrl. Provide baseUrl in the request body or set the Canvas API URL in Settings." },
           { status: 400 }
         );
       }
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
     const supabase = createClient();
     const canvasId = Number(courseId);
     if (Number.isNaN(canvasId)) {
-      return NextResponse.json({ error: "courseId must be a numeric Canvas course id" }, { status: 400 });
+      return NextResponse.json({ error: "courseId must be a numeric Canvas course ID." }, { status: 400 });
     }
 
     let courseUuid: string;
@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
         .single();
       if (insertErr || !inserted) {
         return NextResponse.json(
-          { error: "Could not find or create course. Ensure you are enrolled and courses table exists." },
+          { error: "Could not find or create the course. Ensure you are enrolled and the courses table exists." },
           { status: 400 }
         );
       }
@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
       chunksCreated,
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Ingestion failed";
+    const message = e instanceof Error ? e.message : "Failed to ingest course materials.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
