@@ -8,6 +8,7 @@ import fs from "fs/promises";
 import fsSync from "fs";
 import path from "path";
 import os from "os";
+import ffmpegStatic from "ffmpeg-static";
 
 /** Resolve path to ffmpeg. Next.js bundles can break ffmpeg-static's __dirname; use cwd/node_modules or system "ffmpeg". */
 function getFfmpegPath(): string {
@@ -16,8 +17,10 @@ function getFfmpegPath(): string {
 
   // 1) Path from ffmpeg-static (may be wrong when bundled)
   try {
-    const ffmpegStatic = require("ffmpeg-static");
-    const fromPackage = typeof ffmpegStatic === "string" ? ffmpegStatic : (ffmpegStatic as { path?: string })?.path;
+    const fromPackage =
+      typeof ffmpegStatic === "string"
+        ? ffmpegStatic
+        : (ffmpegStatic as unknown as { path?: string })?.path;
     if (fromPackage && fsSync.existsSync(fromPackage)) return fromPackage;
   } catch {
     // ignore
