@@ -9,29 +9,36 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Play, Pause, SkipForward, Volume2, Settings } from "lucide-react";
+import { Play, Pause, SkipForward, Volume2, Settings, ArrowLeft, MessageCircle, BookOpen } from "lucide-react";
 import LiveChat from "./LiveChat";
+import PracticeQuestion from "./PracticeQuestion";
+import { CustomAvatar } from "./AvatarStudio";
 import { getUserData } from "@/lib/studybuddyStorage";
 
 interface VideoTeacherProps {
   sectionTitle: string;
   sectionContent: string;
+  sectionId: string;
   topic: string;
   onComplete?: () => void;
+  onBack?: () => void;
 }
 
 export default function VideoTeacher({
   sectionTitle,
   sectionContent,
+  sectionId,
   topic,
   onComplete,
+  onBack,
 }: VideoTeacherProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentText, setCurrentText] = useState("");
   const [progress, setProgress] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
-  
+  const [sidebarMode, setSidebarMode] = useState<"chat" | "practice">("chat");
+
   const userData = getUserData();
   const avatarName = userData?.name || "Tutor";
   const avatarConfig = userData?.avatarConfig || {};
@@ -115,28 +122,6 @@ export default function VideoTeacher({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSentenceIndex, isPlaying]);
 
-  // Generate avatar color from config
-  const colors = [
-    "bg-purple-500",
-    "bg-blue-500",
-    "bg-pink-500",
-    "bg-green-500",
-    "bg-indigo-500",
-  ];
-  const colorIndex = avatarConfig.hairColor
-    ? avatarConfig.hairColor.charCodeAt(0) % colors.length
-    : 0;
-  const avatarBgColor = colors[colorIndex];
-
-  const initials = avatarName
-    ? avatarName
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2)
-    : "AI";
-
   return (
     <div className="flex flex-col lg:flex-row h-screen bg-gray-900 text-white">
       {/* Left: Video Player Area (like Twitch main stream) */}
@@ -146,11 +131,15 @@ export default function VideoTeacher({
           {/* Animated Avatar */}
           <div className="relative">
             <div
-              className={`w-64 h-64 ${avatarBgColor} rounded-full flex items-center justify-center text-white text-8xl font-bold shadow-2xl border-8 border-white transition-all duration-200 ${
+              className={`transition-all duration-200 ${
                 isSpeaking ? "scale-105 shadow-purple-500/50" : "scale-100"
               }`}
             >
-              {initials}
+              <CustomAvatar
+                name={avatarName}
+                avatarConfig={avatarConfig}
+                size={256}
+              />
             </div>
             
             {/* Speaking Indicator */}
@@ -175,10 +164,24 @@ export default function VideoTeacher({
             </div>
           )}
 
-          {/* Tutor Name Overlay */}
-          <div className="absolute top-4 left-4 bg-purple-600/90 px-4 py-2 rounded-lg">
-            <p className="font-semibold">🎓 {avatarName}</p>
-            <p className="text-xs text-purple-200">{topic}</p>
+          {/* Header with Back Button */}
+          <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {onBack && (
+                <button
+                  onClick={onBack}
+                  className="flex items-center gap-2 bg-gray-800/90 hover:bg-gray-700/90 px-3 py-2 rounded-lg transition-colors"
+                  title="Back to content selection"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                  <span className="text-sm font-medium">Back</span>
+                </button>
+              )}
+              <div className="bg-purple-600/90 px-4 py-2 rounded-lg">
+                <p className="font-semibold">🎓 {avatarName}</p>
+                <p className="text-xs text-purple-200">{topic}</p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -262,13 +265,49 @@ export default function VideoTeacher({
         </div>
       </div>
 
-      {/* Right: Chat Sidebar (like Twitch chat) */}
-      <div className="w-full lg:w-96 border-t lg:border-t-0 lg:border-l border-gray-700">
-        <LiveChat
-          topic={topic}
-          section={sectionTitle}
-          personalityPrompt={personalityPrompt}
-        />
+      {/* Right: Chat + Practice Sidebar */}
+      <div className="w-full lg:w-96 border-t lg:border-t-0 lg:border-l border-gray-700 flex flex-col">
+        <div className="flex border-b border-gray-700">
+          <button
+            onClick={() => setSidebarMode("chat")}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors ${
+              sidebarMode === "chat"
+                ? "bg-purple-600 text-white"
+                : "bg-gray-800 text-gray-400 hover:text-white"
+            }`}
+          >
+            <MessageCircle className="w-4 h-4" />
+            Chat
+          </button>
+          <button
+            onClick={() => setSidebarMode("practice")}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors ${
+              sidebarMode === "practice"
+                ? "bg-purple-600 text-white"
+                : "bg-gray-800 text-gray-400 hover:text-white"
+            }`}
+          >
+            <BookOpen className="w-4 h-4" />
+            Practice
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          {sidebarMode === "chat" ? (
+            <LiveChat
+              topic={topic}
+              section={sectionTitle}
+              personalityPrompt={personalityPrompt}
+            />
+          ) : (
+            <PracticeQuestion
+              sectionId={sectionId}
+              sectionTitle={sectionTitle}
+              sectionContent={sectionContent}
+              topic={topic}
+              personalityPrompt={personalityPrompt}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

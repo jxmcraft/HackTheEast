@@ -13,8 +13,8 @@ import AvatarStudio from "@/components/studybuddy/AvatarStudio";
 import VideoTeacher from "@/components/studybuddy/VideoTeacher";
 import { NEURAL_NETWORKS_TOPIC, getAllSections, getSectionById } from "@/lib/neuralNetworksContent";
 import { getAllPDFLectures, getPDFLectureById } from "@/lib/pdfContent";
-import { getUserData, initializeUser, updateLastSection } from "@/lib/studybuddyStorage";
-import { Play, FileText, Book } from "lucide-react";
+import { getUserData, initializeUser, updateLastSection, getFirstStruggle, clearUserData } from "@/lib/studybuddyStorage";
+import { Play, FileText, Book, UserCog, LogOut } from "lucide-react";
 
 type PageState = "setup" | "content-selection" | "lesson";
 
@@ -49,8 +49,12 @@ export default function StudyBuddyPage() {
   const currentSection = getCurrentSection();
   const currentTopic = getCurrentTopic();
 
-  // Initialize on mount
+  // Initialize on mount (also handle ?new=1 to start fresh)
   useEffect(() => {
+    if (typeof window !== "undefined" && window.location.search.includes("new=1")) {
+      clearUserData();
+      window.history.replaceState({}, "", "/studybuddy");
+    }
     const user = getUserData();
     if (user) {
       setPageState("content-selection");
@@ -87,20 +91,51 @@ export default function StudyBuddyPage() {
     return <AvatarStudio onComplete={handleAvatarStudioComplete} />;
   }
 
+  const handleStartNewAccount = () => {
+    clearUserData();
+    setPageState("setup");
+  };
+
   // Page 2: Content Selection
   if (pageState === "content-selection") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-6">
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-6 text-gray-900 [color-scheme:light]">
         <div className="max-w-6xl mx-auto">
           {/* Greeting */}
           {userData && (
-            <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                Welcome back, {userData.name}! 👋
-              </h1>
-              <p className="text-gray-600">
-                Choose from pre-loaded lectures or PDFs
-              </p>
+            <div className="bg-white rounded-lg shadow-lg p-6 mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                  {(() => {
+                    const struggleId = getFirstStruggle();
+                    const struggleDisplay = struggleId
+                      ? (getSectionById(struggleId)?.title ?? struggleId)
+                      : null;
+                    return struggleDisplay
+                      ? `Welcome back, ${userData.name}! Last time you struggled with ${struggleDisplay}. Ready to master it?`
+                      : `Welcome back, ${userData.name}! 👋`;
+                  })()}
+                </h1>
+                <p className="text-gray-600">
+                  Choose from pre-loaded lectures or PDFs
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 self-start">
+                <button
+                  onClick={() => setPageState("setup")}
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-700 font-medium rounded-lg transition-colors"
+                >
+                  <UserCog className="w-5 h-5" />
+                  Edit Profile
+                </button>
+                <button
+                  onClick={handleStartNewAccount}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium rounded-lg transition-colors"
+                >
+                  <LogOut className="w-5 h-5" />
+                  Start new account
+                </button>
+              </div>
             </div>
           )}
 
@@ -206,11 +241,10 @@ export default function StudyBuddyPage() {
       <VideoTeacher
         sectionTitle={currentSection.title}
         sectionContent={currentSection.content}
+        sectionId={currentSection.id}
         topic={currentTopic}
-        onComplete={() => {
-          // Optional: Navigate back or to next section
-          setPageState("content-selection");
-        }}
+        onComplete={() => setPageState("content-selection")}
+        onBack={() => setPageState("content-selection")}
       />
     );
   }

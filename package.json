@@ -17,6 +17,8 @@
     "bun": ">=1.1.0"
   },
   "dependencies": {
+    "@dicebear/collection": "^9.3.2",
+    "@dicebear/core": "^9.3.2",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.98.0",
     "@types/node": "^25.3.2",

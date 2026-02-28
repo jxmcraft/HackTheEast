@@ -6,7 +6,7 @@ This md is for AI to easily find scripts that are frequently used. Make sure aft
 
 ```bash
 # Install required dependencies (already done)
-npm install avataaars --legacy-peer-deps
+bun add boring-avatars
 
 # Run development server
 npm run dev
@@ -18,16 +18,18 @@ npm run build
 ### Core Components & Files
 
 #### Frontend Components
-- `src/components/studybuddy/AvatarStudio.tsx` - Avatar customization (name, appearance, personality prompt) with localStorage persistence
+- `src/components/studybuddy/AvatarStudio.tsx` - Avatar customization (boring-avatars, name, personality prompt) with localStorage
 - `src/components/studybuddy/LiveChat.tsx` - Interactive chat interface with text + voice responses
+- `src/components/studybuddy/PracticeQuestion.tsx` - MCQ practice with hint, submit, feedback
+- `src/components/studybuddy/VideoTeacher.tsx` - Video lesson with Chat + Practice sidebar, back button
 - `src/lib/neuralNetworksContent.ts` - Pre-loaded "Neural Networks Basics" lecture content (4 sections)
-- `src/lib/studybuddyStorage.ts` - localStorage utility for managing user data (avatar config, struggles, practice results)
+- `src/lib/studybuddyStorage.ts` - localStorage utility for user data (avatar config, struggles, practice results)
 
-#### API Routes (To Be Built)
-- `/api/generate/explanation` - Generate voiced section explanation (POST)
-- `/api/generate/quiz` - Generate practice MCQ (POST)
-- `/api/generate/chat` - Generate chat response (POST)
-- `/api/tts` - Text-to-speech conversion (POST)
+#### API Routes
+- `/api/generate/quiz` - Generate practice MCQ (POST) - **Implemented** (MiniMax LLM, fallback when no key)
+- `/api/generate/explanation` - Generate voiced section explanation (POST) - To be built
+- `/api/generate/chat` - Generate chat response (POST) - To be built
+- `/api/tts` - Text-to-speech conversion (POST) - To be built
 
 ### Data Model (localStorage)
 

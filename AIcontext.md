@@ -7,7 +7,7 @@
     "auth": "Supabase",
     "database": "Supabase",
     "apiIntegration": "Canvas LMS API",
-    "other": ["Bun", "Lucide React", "avataaars (deprecated - has compatibility issues)"]
+    "other": ["Bun", "Lucide React", "boring-avatars"]
   },
   "features": [
     "User authentication (sign up, sign in, password reset, sign out)",
@@ -29,7 +29,8 @@
   "apiEndpoints": [
     { "method": "GET", "endpoint": "/api/canvas/courses", "description": "Returns user's Canvas courses" },
     { "method": "GET", "endpoint": "/api/canvas/assignments", "description": "Returns assignments for all enrolled courses" },
-    { "method": "GET", "endpoint": "/api/canvas/calendar", "description": "Returns calendar events (date range)" }
+    { "method": "GET", "endpoint": "/api/canvas/calendar", "description": "Returns calendar events (date range)" },
+    { "method": "POST", "endpoint": "/api/generate/quiz", "description": "Generate MCQ with hint for practice (MiniMax LLM)" }
   ],
   "userFlow": [
     "Sign Up / Sign In",
@@ -73,9 +74,9 @@
     ],
     "whatWasBuilt": {
       "feature1_AvatarStudio": {
-        "status": "Partially complete",
-        "description": "User can enter name, customize avatar (dropdowns work but avatar is simplified circles with initials instead of full Avataaars rendering), and enter personality prompt. All saved to localStorage.",
-        "issues": "Avatar doesn't show the full customizable Avataaars graphic due to library compatibility. Using fallback SimpleAvatar component."
+        "status": "Complete",
+        "description": "User can enter name, customize avatar (boring-avatars), and enter personality prompt. Edit Profile button allows re-editing. Text input displays correctly.",
+        "issues": "None"
       },
       "feature2_PreloadedContent": {
         "status": "Complete",
@@ -94,51 +95,24 @@
         "issues": "Mock responses are hardcoded keyword-based. No real MiniMax API integration yet. Needs /api/generate/chat endpoint."
       },
       "feature5_PracticeQuestion": {
-        "status": "Not implemented",
-        "description": "ORIGINAL PRD: A single 'Practice' button generates one MCQ with a hint via MiniMax LLM. User answers; feedback is shown. Stores wrong answers in localStorage 'struggles' array.",
-        "whatsMissing": "No Practice component created. No /api/generate/quiz endpoint. No UI for MCQ display, answer selection, or feedback. recordPracticeResult() function exists in studybuddyStorage.ts but unused.",
-        "issues": "Completely missing from current implementation"
+        "status": "Complete",
+        "description": "PracticeQuestion component with MCQ, Get Hint, Submit, feedback. /api/generate/quiz endpoint with MiniMax LLM (fallback when no API key). Wrong answers saved to struggles via addStruggle().",
+        "issues": "None"
       },
       "feature6_MemoryReload": {
-        "status": "Partially implemented",
-        "description": "ORIGINAL PRD: On return visit, avatar greets by name and references a past struggle (from wrong answers in practice questions).",
-        "actualImplementation": "Avatar greets by name on content-selection page. localStorage stores struggles array and getFirstStruggle() utility exists.",
-        "whatsMissing": "No reference to past struggles in greeting. Struggles array is never populated (requires Practice feature). Generic greeting instead of personalized one.",
-        "issues": "Depends on Feature 5 being implemented first"
+        "status": "Complete",
+        "description": "Greeting now references past struggles when getFirstStruggle() returns data. Shows section title for friendly display.",
+        "issues": "None"
       },
       "newFeature_VideoTeacher": {
-        "status": "Complete (UI only)",
-        "description": "Twitch.tv style video player with avatar that 'speaks' using Web Speech API. Features: progress bar, play/pause, speed controls, subtitles, speaking indicators, chat sidebar.",
-        "issues": "Uses browser TTS instead of MiniMax Audio API. Avatar animation is simple pulse effect, not true lip-sync."
+        "status": "Complete",
+        "description": "Twitch.tv style video player with back button, Chat + Practice tabs in sidebar. Avatar uses boring-avatars.",
+        "issues": "Uses browser TTS instead of MiniMax Audio API."
       }
     }
   },
   
   "toFix": [
-    {
-      "priority": "HIGH",
-      "issue": "No back button in VideoTeacher component",
-      "details": "User cannot exit video lesson and return to content selection. Need to add back button in VideoTeacher header.",
-      "location": "src/components/studybuddy/VideoTeacher.tsx"
-    },
-    {
-      "priority": "HIGH",
-      "issue": "Text input boxes don't show typed words in AvatarStudio",
-      "details": "Input fields for name and personality prompt may not display text while typing due to state management issues. Check controlled component implementation.",
-      "location": "src/components/studybuddy/AvatarStudio.tsx - handleNameChange, handlePersonalityChange"
-    },
-    {
-      "priority": "HIGH",
-      "issue": "Avatar doesn't show customizable picture",
-      "details": "SimpleAvatar component only shows initials in colored circles. avataaars library was removed due to compatibility errors. Need to either: 1) Fix avataaars integration, 2) Use a different avatar library, or 3) Build custom avatar component.",
-      "location": "src/components/studybuddy/AvatarStudio.tsx - SimpleAvatar function"
-    },
-    {
-      "priority": "MEDIUM",
-      "issue": "Cannot edit AI profile after creation",
-      "details": "After completing avatar setup, user cannot go back to edit name, avatar, or personality prompt. Need 'Edit Profile' button in content selection page.",
-      "location": "src/app/studybuddy/page.tsx - content-selection section"
-    },
     {
       "priority": "MEDIUM",
       "issue": "Chat responses are hardcoded",
@@ -160,26 +134,29 @@
   ],
   
   "nextSteps": [
-    "Fix AvatarStudio text input display bug",
-    "Add back button to VideoTeacher",
-    "Implement Edit Profile functionality",
     "Get MiniMax API keys and create /api/generate/chat endpoint",
     "Create /api/tts endpoint for better voice quality",
-    "Fix or replace avataaars library for full avatar customization",
     "Add real lip-sync animation using audio analysis",
-    "Implement Practice Question feature (PRD Feature 5) - CREATE component with MCQ UI, answer selection, feedback, and /api/generate/quiz endpoint",
-    "Populate struggles array when user answers incorrectly in Practice",
-    "Update greeting in content-selection to reference past struggles (PRD Feature 6)",
     "Optional: Implement /api/generate/explanation endpoint if you want AI-generated explanations instead of using pre-loaded content"
   ],
   
   "prdFeaturesStatus": {
-    "feature1_AvatarStudio": "70% complete - works but avatar display is simplified",
+    "feature1_AvatarStudio": "95% complete - boring-avatars, text input fixed, Edit Profile",
     "feature2_PreloadedContent": "100% complete - extended with PDFs",
     "feature3_VoicedExplanation": "50% complete - VideoTeacher narrates but doesn't use MiniMax LLM/TTS",
     "feature4_LiveChat": "60% complete - UI done, needs real API",
-    "feature5_PracticeQuestion": "0% complete - not started",
-    "feature6_MemoryReload": "30% complete - greeting works, struggles reference missing"
-  }
+    "feature5_PracticeQuestion": "100% complete - PracticeQuestion + /api/generate/quiz",
+    "feature6_MemoryReload": "100% complete - greeting references struggles"
+  },
+  
+  "recentCompleted": [
+    "Fixed text input display in AvatarStudio (deferred localStorage save to useEffect)",
+    "Added back button to VideoTeacher",
+    "Replaced SimpleAvatar with boring-avatars",
+    "Added Edit Profile button in content-selection",
+    "Created PracticeQuestion component + /api/generate/quiz",
+    "Personalized greeting with past struggles",
+    "Fixed initializeUser to update existing user on Edit Profile"
+  ]
 }
 

@@ -54,7 +54,7 @@ export function saveUserData(user: StudyBuddyUser): void {
 }
 
 /**
- * Initialize user with defaults if not exists
+ * Initialize user with defaults if not exists, or update existing user
  */
 export function initializeUser(
   name: string,
@@ -62,23 +62,28 @@ export function initializeUser(
   personalityPrompt: string
 ): StudyBuddyUser {
   const existingUser = getUserData();
-  if (existingUser) {
-    return existingUser;
-  }
+  const baseUser: StudyBuddyUser = existingUser
+    ? { ...existingUser }
+    : {
+        name: "",
+        avatarConfig: {},
+        personalityPrompt: "",
+        struggles: [],
+        lastTopic: "neural_networks",
+        lastSection: "intro",
+        completedSections: [],
+        practiceResults: [],
+      };
 
-  const newUser: StudyBuddyUser = {
+  const updatedUser: StudyBuddyUser = {
+    ...baseUser,
     name,
     avatarConfig,
     personalityPrompt,
-    struggles: [],
-    lastTopic: "neural_networks",
-    lastSection: "intro",
-    completedSections: [],
-    practiceResults: [],
   };
 
-  saveUserData(newUser);
-  return newUser;
+  saveUserData(updatedUser);
+  return updatedUser;
 }
 
 /**
