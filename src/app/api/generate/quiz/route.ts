@@ -19,7 +19,7 @@ interface QuizResponse {
 }
 
 // Generic fallback question when API is unavailable
-function getFallbackQuiz(): QuizResponse {
+function getFallbackQuiz(_sectionId?: string): QuizResponse {
   return {
     question: "What is the best way to check that you understand a topic?",
     options: [

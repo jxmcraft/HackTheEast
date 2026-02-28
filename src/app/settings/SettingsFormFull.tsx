@@ -27,8 +27,8 @@ export function SettingsFormFull({
   const [url, setUrl] = useState(canvasApiUrl);
   const [key, setKey] = useState(canvasApiKey);
   const [prefSaving, setPrefSaving] = useState(false);
-  const [prefSuccess, setPrefSuccess] = useState(false);
-  const [prefError, setPrefError] = useState<string | null>(null);
+  const [_prefSuccess, setPrefSuccess] = useState(false);
+  const [_prefError, setPrefError] = useState<string | null>(null);
   const [credSaving, setCredSaving] = useState(false);
   const [credError, setCredError] = useState<string | null>(null);
 
