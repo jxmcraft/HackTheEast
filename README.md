@@ -35,8 +35,8 @@ Next.js 14 (App Router) + TypeScript + Tailwind CSS + Supabase. Syncs courses, c
 
 This uses the Supabase **Service Role Key** (never expose this in the browser).
 
-1. Set `SUPABASE_SERVICE_ROLE_KEY` in your shell (or a local env file you do not commit).
-2. Run:
+1. Add `SUPABASE_SERVICE_ROLE_KEY` to `.env.local` (see `.env.example`), or set it in your shell.
+2. From the project root, run:
 
    ```bash
    npm run create-example-user

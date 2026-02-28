@@ -1,21 +1,40 @@
 /**
  * Canvas LMS API client and sync utilities.
- * Requires CANVAS_API_URL (e.g. https://your-school.instructure.com) and CANVAS_ACCESS_TOKEN.
+ * Uses optional baseUrl/token when provided; otherwise env CANVAS_API_URL and CANVAS_ACCESS_TOKEN.
  */
 
-const getCanvasConfig = () => {
-  const baseUrl = process.env.CANVAS_API_URL ?? process.env.NEXT_PUBLIC_CANVAS_API_URL;
-  const token = process.env.CANVAS_ACCESS_TOKEN ?? process.env.NEXT_PUBLIC_CANVAS_ACCESS_TOKEN;
+export type CanvasConfig = {
+  baseUrl?: string;
+  token?: string;
+};
+
+function getCanvasConfig(overrides?: Partial<CanvasConfig>): { apiBase: string; token: string } {
+  const baseUrl =
+    overrides?.baseUrl ??
+    process.env.CANVAS_API_URL ??
+    process.env.NEXT_PUBLIC_CANVAS_API_URL ??
+    "";
+  const token =
+    overrides?.token ??
+    process.env.CANVAS_ACCESS_TOKEN ??
+    process.env.NEXT_PUBLIC_CANVAS_ACCESS_TOKEN ??
+    "";
   if (!baseUrl || !token) {
-    throw new Error("Canvas API: set CANVAS_API_URL and CANVAS_ACCESS_TOKEN (or NEXT_PUBLIC_* for client).");
+    throw new Error(
+      "Canvas API: set Canvas API URL and Access Token in Settings, or set CANVAS_API_URL and CANVAS_ACCESS_TOKEN in .env."
+    );
   }
   const apiBase = baseUrl.replace(/\/$/, "") + "/api/v1";
   return { apiBase, token };
-};
+}
 
 /** Paginate through a Canvas list endpoint (Link header). */
-async function canvasFetchAll<T>(path: string, params?: Record<string, string>): Promise<T[]> {
-  const { apiBase, token } = getCanvasConfig();
+async function canvasFetchAll<T>(
+  path: string,
+  params?: Record<string, string>,
+  overrides?: Partial<CanvasConfig>
+): Promise<T[]> {
+  const { apiBase, token } = getCanvasConfig(overrides);
   let url: string = apiBase + path;
   if (params) {
     const u = new URL(url);
@@ -80,43 +99,43 @@ export interface CanvasAssignment {
 /**
  * Fetch all courses the current user is enrolled in (active).
  */
-export async function syncCourses(): Promise<CanvasCourse[]> {
-  const list = await canvasFetchAll<CanvasCourse>("/courses", {
-    enrollment_state: "active",
-    per_page: "100",
-  });
+export async function syncCourses(credentials?: Partial<CanvasConfig>): Promise<CanvasCourse[]> {
+  const list = await canvasFetchAll<CanvasCourse>(
+    "/courses",
+    { enrollment_state: "active", per_page: "100" },
+    credentials
+  );
   return list.filter((c) => c.workflow_state === "available" || c.workflow_state === "completed");
 }
 
 /**
  * Fetch upcoming calendar events (tutorials, labs, exams, etc.) within a date range.
- * Use type=event for non-assignment events; assignments are fetched via syncAssignments.
  */
-export async function syncCalendar(options?: {
-  startDate?: string; // yyyy-mm-dd
-  endDate?: string;   // yyyy-mm-dd
-}): Promise<CanvasCalendarEvent[]> {
+export async function syncCalendar(
+  options?: { startDate?: string; endDate?: string },
+  credentials?: Partial<CanvasConfig>
+): Promise<CanvasCalendarEvent[]> {
   const start = options?.startDate ?? new Date().toISOString().slice(0, 10);
   const end = options?.endDate ?? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const list = await canvasFetchAll<CanvasCalendarEvent>("/calendar_events", {
-    type: "event",
-    start_date: start,
-    end_date: end,
-    per_page: "100",
-  });
+  const list = await canvasFetchAll<CanvasCalendarEvent>(
+    "/calendar_events",
+    { type: "event", start_date: start, end_date: end, per_page: "100" },
+    credentials
+  );
   return list.filter((e) => e.workflow_state !== "deleted");
 }
 
 /**
  * Fetch assignments (homework tasks and descriptions) for all enrolled courses.
  */
-export async function syncAssignments(): Promise<CanvasAssignment[]> {
-  const courses = await syncCourses();
+export async function syncAssignments(credentials?: Partial<CanvasConfig>): Promise<CanvasAssignment[]> {
+  const courses = await syncCourses(credentials);
   const all: CanvasAssignment[] = [];
   for (const course of courses) {
     const assignments = await canvasFetchAll<CanvasAssignment>(
       `/courses/${course.id}/assignments`,
-      { per_page: "100" }
+      { per_page: "100" },
+      credentials
     );
     all.push(...assignments);
   }

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-const PROTECTED_PREFIXES = ["/sync-dashboard"];
+const PROTECTED_PREFIXES = ["/sync-dashboard", "/dashboard", "/settings"];
 const AUTH_PREFIX = "/auth";
 
 export async function middleware(request: NextRequest) {
@@ -26,7 +26,6 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Refresh session if needed (must happen before route protection checks).
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -37,7 +36,7 @@ export async function middleware(request: NextRequest) {
 
   if (isProtected && !user) {
     const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = "/auth/signin";
+    redirectUrl.pathname = "/login";
     redirectUrl.searchParams.set("next", pathname + search);
     return NextResponse.redirect(redirectUrl);
   }

@@ -1,4 +1,25 @@
+import path from "path";
+import { fileURLToPath } from "url";
+import { existsSync } from "fs";
+import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
+
+// Load .env from project root. Prefer cwd (when run via "npm run" from repo root), else script-relative.
+const cwdRoot = process.cwd();
+const scriptDir =
+  typeof __dirname !== "undefined"
+    ? __dirname
+    : path.dirname(fileURLToPath(import.meta.url));
+const scriptRoot = path.resolve(scriptDir, "..");
+
+const root =
+  existsSync(path.join(cwdRoot, ".env.local")) ||
+  existsSync(path.join(cwdRoot, ".env"))
+    ? cwdRoot
+    : scriptRoot;
+
+dotenv.config({ path: path.join(root, ".env") });
+dotenv.config({ path: path.join(root, ".env.local") });
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -10,7 +31,7 @@ const FULL_NAME = process.env.EXAMPLE_USER_FULL_NAME ?? "Test User";
 async function main() {
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
     throw new Error(
-      "Missing env: set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY before running this script."
+      "Missing env: set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY before running this script, or define them in .env.local."
     );
   }
 
@@ -25,7 +46,19 @@ async function main() {
     user_metadata: { full_name: FULL_NAME },
   });
 
-  if (error) throw error;
+  if (error) {
+    const isEmailExists =
+      (error as { code?: string }).code === "email_exists" ||
+      (error as { status?: number }).status === 422;
+    if (isEmailExists) {
+      console.log("A user with this email already exists:", EMAIL);
+      console.log(
+        "Sign in at /login with that email. If you don't know the password, reset it in Supabase Dashboard → Authentication → Users, or set EXAMPLE_USER_EMAIL to create a different user."
+      );
+      return;
+    }
+    throw error;
+  }
 
   console.log("Created user:", {
     id: data.user?.id,

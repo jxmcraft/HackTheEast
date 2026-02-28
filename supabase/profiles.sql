@@ -4,9 +4,14 @@ create table if not exists public.profiles (
   email text,
   full_name text,
   avatar_url text,
+  canvas_api_url text,
+  canvas_api_key text,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now()
 );
+
+-- Add Canvas URL column if it was missing (e.g. existing profiles table)
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS canvas_api_url text;
 
 -- Enable Row Level Security
 alter table public.profiles enable row level security;
@@ -21,12 +26,13 @@ create policy "Users can update own profile" on public.profiles
 create policy "Users can insert own profile" on public.profiles
   for insert with check (auth.uid() = id);
 
--- Function to automatically create profile on signup
+-- Function to automatically create profile on signup (skips if profile already exists)
 create or replace function public.handle_new_user()
 returns trigger as $$
 begin
   insert into public.profiles (id, email, full_name)
-  values (new.id, new.email, new.raw_user_meta_data->>'full_name');
+  values (new.id, new.email, new.raw_user_meta_data->>'full_name')
+  on conflict (id) do nothing;
   return new;
 end;
 $$ language plpgsql security definer;

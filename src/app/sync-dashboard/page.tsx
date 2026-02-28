@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   BookOpen,
-  Calendar,
   ClipboardList,
   Loader2,
   RefreshCw,
@@ -20,14 +19,6 @@ import {
 import { cn } from "@/lib/utils";
 
 type CanvasCourse = { id: number; name: string; course_code?: string };
-type CanvasEvent = {
-  id: number | string;
-  title: string;
-  start_at: string;
-  end_at: string;
-  context_name?: string;
-  all_day?: boolean;
-};
 type CanvasAssignment = {
   id: number;
   name: string;
@@ -38,9 +29,8 @@ type CanvasAssignment = {
 
 export default function SyncDashboardPage() {
   const [courses, setCourses] = useState<CanvasCourse[]>([]);
-  const [events, setEvents] = useState<CanvasEvent[]>([]);
   const [assignments, setAssignments] = useState<CanvasAssignment[]>([]);
-  const [loading, setLoading] = useState<"idle" | "courses" | "calendar" | "assignments" | "all">("idle");
+  const [loading, setLoading] = useState<"idle" | "courses" | "assignments" | "all">("idle");
   const [error, setError] = useState<string | null>(null);
 
   const loadCourses = async () => {
@@ -54,22 +44,6 @@ export default function SyncDashboardPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
       setCourses([]);
-    } finally {
-      setLoading("idle");
-    }
-  };
-
-  const loadCalendar = async () => {
-    setLoading("calendar");
-    setError(null);
-    try {
-      const res = await fetch("/api/canvas/calendar");
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to fetch calendar");
-      setEvents(Array.isArray(data) ? data : []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
-      setEvents([]);
     } finally {
       setLoading("idle");
     }
@@ -95,21 +69,17 @@ export default function SyncDashboardPage() {
     setLoading("all");
     setError(null);
     try {
-      const [coursesRes, calendarRes, assignmentsRes] = await Promise.all([
+      const [coursesRes, assignmentsRes] = await Promise.all([
         fetch("/api/canvas/courses"),
-        fetch("/api/canvas/calendar"),
         fetch("/api/canvas/assignments"),
       ]);
-      const [coursesData, calendarData, assignmentsData] = await Promise.all([
+      const [coursesData, assignmentsData] = await Promise.all([
         coursesRes.json(),
-        calendarRes.json(),
         assignmentsRes.json(),
       ]);
       if (!coursesRes.ok) throw new Error(coursesData.error || "Courses failed");
-      if (!calendarRes.ok) throw new Error(calendarData.error || "Calendar failed");
       if (!assignmentsRes.ok) throw new Error(assignmentsData.error || "Assignments failed");
       setCourses(Array.isArray(coursesData) ? coursesData : []);
-      setEvents(Array.isArray(calendarData) ? calendarData : []);
       setAssignments(Array.isArray(assignmentsData) ? assignmentsData : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
@@ -193,51 +163,6 @@ export default function SyncDashboardPage() {
                   <TableCell className="font-mono text-[var(--muted-foreground)]">{c.id}</TableCell>
                   <TableCell>{c.name}</TableCell>
                   <TableCell>{c.course_code ?? "—"}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </section>
-
-        <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 md:p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-lg font-semibold">
-              <Calendar className="h-5 w-5 text-[var(--muted-foreground)]" />
-              Calendar (tutorials, labs, exams)
-            </h2>
-            <button
-              onClick={loadCalendar}
-              disabled={isLoading}
-              className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] disabled:opacity-50"
-            >
-              {loading === "calendar" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Refresh"}
-            </button>
-          </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Title</TableHead>
-                <TableHead>Context</TableHead>
-                <TableHead>Start</TableHead>
-                <TableHead>End</TableHead>
-                <TableHead>All day</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {events.length === 0 && !loading && (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-[var(--muted-foreground)]">
-                    No events. Click Sync all or Refresh to load.
-                  </TableCell>
-                </TableRow>
-              )}
-              {events.map((e) => (
-                <TableRow key={String(e.id)}>
-                  <TableCell className="font-medium">{e.title}</TableCell>
-                  <TableCell>{e.context_name ?? "—"}</TableCell>
-                  <TableCell>{formatDate(e.start_at)}</TableCell>
-                  <TableCell>{formatDate(e.end_at)}</TableCell>
-                  <TableCell>{e.all_day ? "Yes" : "No"}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
