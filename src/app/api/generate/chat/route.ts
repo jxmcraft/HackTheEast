@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const {
       message,
-      topic = "Neural Networks",
+      topic = "your topic",
       section = "",
       personalityPrompt = "be clear and helpful",
       sectionContent = "",

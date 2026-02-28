@@ -35,7 +35,7 @@ export default function PracticeQuestion({
   sectionTitle,
   personalityPrompt,
   sectionContent,
-  topic = "Neural Networks Basics",
+  topic = "this topic",
   onClose,
 }: PracticeQuestionProps) {
   const [quiz, setQuiz] = useState<QuizData | null>(null);

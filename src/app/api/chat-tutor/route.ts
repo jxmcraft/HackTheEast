@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClientOrThrow } from "@/utils/supabase/server";
 import { PERSONALITIES, type AvatarStyle } from "@/lib/avatar/personality";
+import { getContextualMemories, formatMemoriesForPrompt } from "@/lib/memory/context";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -164,8 +165,11 @@ export async function POST(request: NextRequest) {
     const style: AvatarStyle = (prefs?.avatar_style as AvatarStyle) ?? avatarStyle;
     const teachingStyle = getTeachingStylePrompt(style);
 
-    const systemPrompt = `You are a helpful tutor. The student is learning about ${topic}.
+    const memories = await getContextualMemories(supabase, user.id, 5);
+    const memoryBlock = memories.length > 0 ? `\n${formatMemoriesForPrompt(memories)}\n\n` : "";
 
+    const systemPrompt = `You are a helpful tutor. The student is learning about ${topic}.
+${memoryBlock}
 Teaching style: ${teachingStyle}
 
 Guidelines:

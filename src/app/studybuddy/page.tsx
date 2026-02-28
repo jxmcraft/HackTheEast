@@ -2,7 +2,7 @@
  * Main StudyBuddy Page
  * Orchestrates the full user flow:
  * 1. Avatar Studio (if new user)
- * 2. Content Selection (Neural Networks sections)
+ * 2. Content Selection (lesson topic, past lessons, PDFs, uploads)
  * 3. Voiced lesson + Chat + Practice
  */
 
@@ -12,21 +12,23 @@ import React, { useState, useEffect, useLayoutEffect, useCallback } from "react"
 import Link from "next/link";
 import AvatarStudio from "@/components/studybuddy/AvatarStudio";
 import VideoTeacher from "@/components/studybuddy/VideoTeacher";
-import { NEURAL_NETWORKS_TOPIC, getAllSections, getSectionById } from "@/lib/neuralNetworksContent";
-import { getAllPDFLectures, getPDFLectureById } from "@/lib/pdfContent";
 import { getUserData, initializeUser, updateLastSection, getFirstStruggle, clearUserData, saveUserData, setLessonTopicFromDashboard, getRecentLessonTopics } from "@/lib/studybuddyStorage";
 import type { StudyBuddyUser } from "@/lib/studybuddyStorage";
-import { Play, FileText, Book, BookOpen, UserCog, LogOut, Link2, CloudDownload, Loader2, Bookmark, FolderUp } from "lucide-react";
+import { Play, BookOpen, UserCog, LogOut, Link2, CloudDownload, Loader2, Bookmark, FolderUp, FileText } from "lucide-react";
 import UploadedMaterials, { getLocalUploads, setLocalUploads, type UploadedDoc } from "@/components/studybuddy/UploadedMaterials";
 
 type PageState = "setup" | "content-selection" | "lesson";
 
 export default function StudyBuddyPage() {
   const [pageState, setPageState] = useState<PageState>("setup");
-  const [currentSectionId, setCurrentSectionId] = useState("intro");
-  const [currentSourceType, setCurrentSourceType] = useState<"neural_networks" | "pdf" | "lesson_topic">("neural_networks");
-  const [currentPDFId, setCurrentPDFId] = useState("");
+  const [currentSectionId, setCurrentSectionId] = useState("__lesson_topic__");
+  const [currentSourceType, setCurrentSourceType] = useState<"lesson_topic">("lesson_topic");
   const [lessonTopicOnlyMode, setLessonTopicOnlyMode] = useState<string | null>(null);
+  const [lessonCourseId, setLessonCourseId] = useState<string | null>(null);
+  const [canvasMaterialsContent, setCanvasMaterialsContent] = useState<string>("");
+  const [canvasMaterialsSources, setCanvasMaterialsSources] = useState<{ title: string; url?: string; content_type?: string }[]>([]);
+  const [canvasMaterialsLoading, setCanvasMaterialsLoading] = useState(false);
+  const [canvasMaterialsFetched, setCanvasMaterialsFetched] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState<{ linked: boolean; email?: string; data?: StudyBuddyUser | null } | null>(null);
   const [syncLoading, setSyncLoading] = useState(false);
@@ -34,46 +36,65 @@ export default function StudyBuddyPage() {
   const [localUploads, setLocalUploadsState] = useState<UploadedDoc[]>([]);
   const [fromLessonTopic, setFromLessonTopic] = useState<string | null>(null);
 
-  const sections = getAllSections();
-  const pdfLectures = getAllPDFLectures();
   const userData = getUserData();
 
   const activeLessonTopic = fromLessonTopic ?? userData?.lessonTopicFromDashboard ?? lessonTopicOnlyMode ?? null;
 
-  // Get current content based on source type
+  // Get current content based on source type (lesson topic only; Canvas materials loaded when from lesson)
   const getCurrentSection = () => {
-    if (currentSourceType === "lesson_topic" && currentSectionId === "__lesson_topic__") {
-      const topic = lessonTopicOnlyMode || activeLessonTopic || "Your lesson";
-      return { id: "__lesson_topic__", title: topic, content: "Chat with your tutor about your lesson topic. Ask questions, get explanations, or test your understanding." };
-    }
-    if (currentSourceType === "pdf" && currentPDFId) {
-      const pdfLecture = getPDFLectureById(currentPDFId);
-      return pdfLecture?.sections.find((s) => s.id === currentSectionId);
-    }
-    return getSectionById(currentSectionId);
+    const topic = lessonTopicOnlyMode || activeLessonTopic || "Your lesson";
+    const content = canvasMaterialsContent
+      ? `${topic}\n\nCourse materials from Canvas:\n\n${canvasMaterialsContent}`
+      : "Chat with your tutor about your lesson topic. Ask questions, get explanations, or test your understanding.";
+    return { id: "__lesson_topic__", title: topic, content };
   };
 
-  const getCurrentTopic = () => {
-    if (currentSourceType === "lesson_topic") return lessonTopicOnlyMode || activeLessonTopic || "Your lesson";
-    if (currentSourceType === "pdf" && currentPDFId) {
-      const pdfLecture = getPDFLectureById(currentPDFId);
-      return pdfLecture?.title || "PDF Lecture";
-    }
-    return NEURAL_NETWORKS_TOPIC.title;
-  };
+  const getCurrentTopic = () => lessonTopicOnlyMode || activeLessonTopic || "Your lesson";
 
   const currentSection = getCurrentSection();
   const currentTopic = getCurrentTopic();
 
-  // Full topic content for script flow (all sections so AI can connect them)
-  const fullTopicContent =
-    currentSourceType === "lesson_topic"
-      ? (lessonTopicOnlyMode || activeLessonTopic || "Your lesson") + "\n\nFocus on the student's lesson topic in chat."
-      : currentSourceType === "pdf" && currentPDFId
-        ? (getPDFLectureById(currentPDFId)?.sections ?? [])
-            .map((s) => `${s.title}\n\n${s.content}`)
-            .join("\n\n---\n\n")
-        : sections.map((s) => `${s.title}\n\n${s.content}`).join("\n\n---\n\n");
+  // Full topic content for script flow; when from lesson with courseId, include Canvas materials
+  const topicLabel = lessonTopicOnlyMode || activeLessonTopic || "Your lesson";
+  const fullTopicContent = canvasMaterialsContent
+    ? `${topicLabel}\n\nCourse materials from Canvas:\n\n${canvasMaterialsContent}\n\nFocus on the student's lesson topic in chat.`
+    : `${topicLabel}\n\nFocus on the student's lesson topic in chat.`;
+
+  // Fetch Canvas course materials when opened from a lesson with courseId + topic
+  useEffect(() => {
+    const topic = fromLessonTopic ?? lessonTopicOnlyMode ?? userData?.lessonTopicFromDashboard ?? "";
+    if (!lessonCourseId || !topic.trim()) {
+      setCanvasMaterialsFetched(false);
+      return;
+    }
+    let cancelled = false;
+    setCanvasMaterialsLoading(true);
+    setCanvasMaterialsFetched(false);
+    fetch(
+      `/api/studybuddy/course-materials?courseId=${encodeURIComponent(lessonCourseId)}&topic=${encodeURIComponent(topic)}`
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled) {
+          if (typeof data?.content === "string") setCanvasMaterialsContent(data.content);
+          if (Array.isArray(data?.sources)) setCanvasMaterialsSources(data.sources);
+          else setCanvasMaterialsSources([]);
+          setCanvasMaterialsFetched(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCanvasMaterialsSources([]);
+          setCanvasMaterialsFetched(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCanvasMaterialsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lessonCourseId, fromLessonTopic, lessonTopicOnlyMode, userData?.lessonTopicFromDashboard]);
 
   // Initialize on mount before paint so user doesn't see "Loading..." (useLayoutEffect runs before browser paint)
   useLayoutEffect(() => {
@@ -97,6 +118,10 @@ export default function StudyBuddyPage() {
     if (fromLesson === "1" && lessonTopicDecoded) {
       setLessonTopicFromDashboard(lessonTopicDecoded);
       setFromLessonTopic(lessonTopicDecoded);
+      setLessonTopicOnlyMode(lessonTopicDecoded);
+      setCurrentSectionId("__lesson_topic__");
+      const courseIdParam = params.get("courseId")?.trim();
+      if (courseIdParam) setLessonCourseId(courseIdParam);
       window.history.replaceState({}, "", "/studybuddy");
       // #region agent log
       const afterSave = getUserData();
@@ -105,8 +130,7 @@ export default function StudyBuddyPage() {
     }
     const openSection = params.get("open");
     const openTopic = params.get("topic");
-    const openSource = params.get("source") as "neural_networks" | "pdf" | "lesson_topic" | null;
-    const openPdfId = params.get("pdfId") ?? "";
+    const openSource = params.get("source") as "lesson_topic" | null;
 
     const user = getUserData();
     if (!user) {
@@ -114,14 +138,19 @@ export default function StudyBuddyPage() {
       setIsLoading(false);
       return;
     }
-    setPageState("content-selection");
-    setCurrentSectionId(user.lastSection);
+    if (fromLesson === "1" && lessonTopicDecoded) {
+      setPageState("lesson");
+    } else {
+      setPageState("content-selection");
+    }
+    const lastSection = user.lastSection;
+    const isLegacyNNSection = ["intro", "network_architecture", "activation_functions", "training"].includes(lastSection);
+    setCurrentSectionId(isLegacyNNSection ? "__lesson_topic__" : lastSection);
 
-    if (openSection && openTopic) {
-      setCurrentSectionId(openSection);
-      setCurrentSourceType(openSource === "pdf" ? "pdf" : openSource === "lesson_topic" ? "lesson_topic" : "neural_networks");
-      if (openSource === "pdf" && openPdfId) setCurrentPDFId(openPdfId);
-      if (openSource === "lesson_topic") setLessonTopicOnlyMode(openTopic);
+    if (openSection && openTopic && (openSource === "lesson_topic" || !openSource)) {
+      setCurrentSectionId(openSection === "intro" || openSection === "network_architecture" || openSection === "activation_functions" || openSection === "training" ? "__lesson_topic__" : openSection);
+      setCurrentSourceType("lesson_topic");
+      setLessonTopicOnlyMode(openTopic || null);
       setPageState("lesson");
     }
     setIsLoading(false);
@@ -221,19 +250,18 @@ export default function StudyBuddyPage() {
     setPageState("content-selection");
   };
 
-  const handleSelectSection = (sectionId: string, sourceType: "neural_networks" | "pdf" = "neural_networks", pdfId?: string) => {
-    setLessonTopicOnlyMode(null);
+  const handleSelectSection = (sectionId: string) => {
     setCurrentSectionId(sectionId);
-    setCurrentSourceType(sourceType);
-    if (pdfId) setCurrentPDFId(pdfId);
+    setCurrentSourceType("lesson_topic");
     updateLastSection(currentTopic, sectionId);
     setPageState("lesson");
   };
 
-  const handleStartLessonTopic = (topic: string) => {
+  const handleStartLessonTopic = (topic: string, courseId?: string) => {
     setCurrentSectionId("__lesson_topic__");
     setCurrentSourceType("lesson_topic");
     setLessonTopicOnlyMode(topic);
+    if (courseId) setLessonCourseId(courseId);
     setPageState("lesson");
   };
 
@@ -267,16 +295,14 @@ export default function StudyBuddyPage() {
                 <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">
                   {(() => {
                     const struggleId = getFirstStruggle();
-                    const struggleDisplay = struggleId
-                      ? (getSectionById(struggleId)?.title ?? struggleId)
-                      : null;
+                    const struggleDisplay = struggleId ?? null;
                     return struggleDisplay
                       ? `Welcome back, ${userData.userProfile.name}! Last time you struggled with ${struggleDisplay}. Ready to master it?`
                       : `Welcome back, ${userData.userProfile.name}! 👋`;
                   })()}
                 </h1>
                 <p className="text-[var(--muted-foreground)]">
-                  Choose from pre-loaded lectures or PDFs
+                  Choose a lesson topic or upload materials
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 self-start">
@@ -404,99 +430,50 @@ export default function StudyBuddyPage() {
               onRefresh={fetchUploads}
               onUploadsChange={handleUploadsChange}
             />
-          </div>
 
-          {/* Neural Networks and PDFs: only when no lesson topic */}
-          {!activeLessonTopic && (
-            <>
-          {/* Neural Networks Topic */}
-          <div className="mb-8">
-            <div className="bg-[var(--card)] rounded-lg shadow-lg p-6 mb-4 border border-[var(--border)]">
-              <div className="flex items-center gap-3 mb-2">
-                <Book className="w-6 h-6 text-[var(--color-primary)]" />
-                <h2 className="text-2xl font-bold text-[var(--foreground)]">
-                  {NEURAL_NETWORKS_TOPIC.title}
-                </h2>
+            {/* Files from your Canvas course used to generate your StudyBuddy lesson — always visible */}
+            <div className="mt-4 pt-4 border-t border-[var(--border)]">
+              <div className="flex items-center gap-2 mb-2">
+                <FileText className="w-4 h-4 text-[var(--color-primary)] shrink-0" />
+                <h3 className="text-sm font-semibold text-[var(--foreground)]">Files used for your StudyBuddy lesson</h3>
               </div>
-              <p className="text-[var(--muted-foreground)] mb-2">{NEURAL_NETWORKS_TOPIC.description}</p>
-              <p className="text-sm text-[var(--color-primary)] font-medium">
-                Interactive video lessons with live chat
+              <p className="text-xs text-[var(--muted-foreground)] mb-2">
+                Course materials from your Canvas course that we use to generate your lesson (differs per course).
               </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {sections.map((section) => (
-                <button
-                  key={section.id}
-                  onClick={() => handleSelectSection(section.id, "neural_networks")}
-                  className="bg-[var(--card)] rounded-lg shadow hover:shadow-lg transition-all duration-200 p-6 text-left group border border-[var(--border)] hover:border-[var(--color-primary)]/50"
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <h3 className="text-lg font-semibold text-[var(--foreground)] group-hover:text-[var(--color-primary)]">
-                      {section.order}. {section.title}
-                    </h3>
-                    <Play className="w-5 h-5 text-[var(--color-primary)]/70 group-hover:text-[var(--color-primary)] transition-colors" />
-                  </div>
-                  <p className="text-sm text-[var(--muted-foreground)] line-clamp-2">
-                    {section.content.substring(0, 100)}...
-                  </p>
-                  <p className="text-xs text-[var(--color-primary)] mt-3 font-medium">🎥 Video Lesson</p>
-                </button>
-              ))}
+              {!lessonCourseId && !canvasMaterialsFetched && (
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  Open a lesson from your dashboard and click &quot;Practice in StudyBuddy&quot; to load and list the files here.
+                </p>
+              )}
+              {canvasMaterialsLoading && !canvasMaterialsFetched && (
+                <p className="text-xs text-[var(--muted-foreground)]">Loading…</p>
+              )}
+              {!canvasMaterialsLoading && canvasMaterialsFetched && canvasMaterialsSources.length === 0 && (
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  No course materials found for your topic. Sync and ingest your course from the dashboard, then open a lesson and use Practice in StudyBuddy.
+                </p>
+              )}
+              {canvasMaterialsSources.length > 0 && (
+                <ul className="space-y-1.5 text-xs">
+                  {canvasMaterialsSources.map((src, i) => (
+                    <li key={`${src.title}-${i}`} className="flex items-start gap-2">
+                      <FileText className="w-3.5 h-3.5 text-[var(--muted-foreground)] shrink-0 mt-0.5" />
+                      {src.url ? (
+                        <a href={src.url} target="_blank" rel="noopener noreferrer" className="text-[var(--color-primary)] hover:underline truncate">
+                          {src.title}
+                        </a>
+                      ) : (
+                        <span className="text-[var(--foreground)] truncate">{src.title}</span>
+                      )}
+                      {src.content_type && (
+                        <span className="shrink-0 text-[var(--muted-foreground)]">({src.content_type})</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
-
-          {/* PDF Lectures */}
-          <div>
-            <div className="bg-[var(--color-primary)] text-[var(--color-primary-foreground)] rounded-lg shadow-lg p-6 mb-4">
-              <div className="flex items-center gap-3 mb-2">
-                <FileText className="w-6 h-6" />
-                <h2 className="text-2xl font-bold">
-                  PDF Lectures
-                </h2>
-              </div>
-              <p className="text-[var(--color-primary-foreground)]/90">
-                Learn from textbooks, lecture slides, and academic papers
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {pdfLectures.map((pdfLecture) => (
-                <div key={pdfLecture.id} className="bg-[var(--card)] rounded-lg shadow p-6 border border-[var(--border)]">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="text-lg font-semibold text-[var(--foreground)] mb-1">
-                        {pdfLecture.title}
-                      </h3>
-                      <p className="text-xs text-[var(--muted-foreground)]">{pdfLecture.source}</p>
-                    </div>
-                    <FileText className="w-5 h-5 text-[var(--color-primary)]" />
-                  </div>
-                  <div className="space-y-2">
-                    {pdfLecture.sections.map((section) => (
-                      <button
-                        key={section.id}
-                        onClick={() => handleSelectSection(section.id, "pdf", pdfLecture.id)}
-                        className="w-full text-left px-3 py-2 rounded hover:bg-[var(--muted)] transition-colors group"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-[var(--foreground)] group-hover:text-[var(--color-primary)]">
-                            {section.title}
-                          </span>
-                          <Play className="w-4 h-4 text-[var(--color-primary)]/70 group-hover:text-[var(--color-primary)]" />
-                        </div>
-                        {section.pageNumbers && (
-                          <span className="text-xs text-[var(--muted-foreground)]">{section.pageNumbers}</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-            </>
-          )}
 
           {/* Attribution */}
           <div className="mt-8 text-center text-sm text-[var(--muted-foreground)]">
@@ -521,9 +498,13 @@ export default function StudyBuddyPage() {
         topic={currentTopic}
         fullTopicContent={fullTopicContent}
         uploadedMaterials={allUploads}
-        sourceType={currentSourceType}
-        pdfId={currentSourceType === "pdf" ? currentPDFId : undefined}
+        sourceType="lesson_topic"
         lessonTopicFromDashboard={lessonTopicPassed}
+        courseMaterialsSources={canvasMaterialsSources}
+        courseMaterialsLoading={canvasMaterialsLoading}
+        showCourseMaterialsSection={true}
+        courseMaterialsFetched={canvasMaterialsFetched}
+        hasLessonCourseId={!!lessonCourseId}
         onComplete={() => setPageState("content-selection")}
         onBack={() => setPageState("content-selection")}
       />

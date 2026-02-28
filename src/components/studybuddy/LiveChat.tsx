@@ -395,14 +395,9 @@ async function generateMockResponse(
   const lowerMessage = userMessage.toLowerCase();
 
   const responses: Record<string, string> = {
-    neuron: `Great question! A neuron is the fundamental unit of neural networks. It takes multiple inputs, multiplies them by weights, adds a bias, and applies an activation function. Think of it like a decision-making unit that learns over time. The personality prompt says to "${personalityPrompt}", so I'm excited to explain this!`,
-    "activation function":
-      "Activation functions introduce non-linearity into neural networks. Without them, stacking layers would just create one big linear transformation. ReLU, sigmoid, and tanh are popular choices. Each has its strengths!",
-    backpropagation:
-      "Backpropagation is how neural networks learn! It uses the chain rule to compute gradients of the loss with respect to each weight, working backwards from the output layer. This lets us efficiently update weights to minimize error.",
-    training:
-      "Training involves: 1) Forward pass to get predictions, 2) Calculate loss, 3) Backward pass to compute gradients, 4) Update weights. We repeat this multiple times (epochs) until the network converges.",
-    loss: "Loss functions measure how wrong the model is. For regression, we use MSE. For classification, we use cross-entropy. Lower loss = better model!",
+    example: "A good way to understand a concept is to see an example. Try applying it to something you already know, or ask for a concrete scenario.",
+    definition: "Definitions are a starting point. To really understand, try explaining it in your own words or connecting it to other ideas.",
+    practice: "Practice helps! Try summarizing what you learned, teaching it to someone else, or doing a few practice questions.",
   };
 
   // Find a matching response or return a generic one

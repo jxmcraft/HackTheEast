@@ -5,7 +5,6 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSectionById } from "@/lib/neuralNetworksContent";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,52 +18,21 @@ interface QuizResponse {
   explanation: string;
 }
 
-// Fallback question when API is unavailable
-function getFallbackQuiz(sectionId: string): QuizResponse {
-  const fallbacks: Record<string, QuizResponse> = {
-    intro: {
-      question: "What is the mathematical formula for a neuron's output?",
-      options: [
-        "output = sum(inputs)",
-        "output = activation(w1*x1 + w2*x2 + ... + bias)",
-        "output = weights * inputs",
-        "output = bias only",
-      ],
-      correctAnswer: "output = activation(w1*x1 + w2*x2 + ... + bias)",
-      correctIndex: 1,
-      hint: "Think about what happens to the weighted sum before it becomes the final output.",
-      explanation:
-        "A neuron multiplies each input by its weight, sums them with a bias, then passes the result through an activation function.",
-    },
-    network_architecture: {
-      question: "Which layer receives raw data in a neural network?",
-      options: ["Hidden Layer", "Output Layer", "Input Layer", "Activation Layer"],
-      correctAnswer: "Input Layer",
-      correctIndex: 2,
-      hint: "Consider where data first enters the network.",
-      explanation: "The input layer receives raw data; the number of neurons equals the number of features.",
-    },
-    backpropagation: {
-      question: "What does backpropagation use to compute gradients?",
-      options: ["Forward pass", "Chain rule", "Activation function", "Loss only"],
-      correctAnswer: "Chain rule",
-      correctIndex: 1,
-      hint: "It's a calculus technique for computing derivatives of composite functions.",
-      explanation: "Backpropagation uses the chain rule to compute gradients of the loss with respect to each weight.",
-    },
-    training: {
-      question: "What is one complete pass through the training data called?",
-      options: ["Batch", "Iteration", "Epoch", "Step"],
-      correctAnswer: "Epoch",
-      correctIndex: 2,
-      hint: "Think about how many times the model sees the full dataset.",
-      explanation: "An epoch is one complete pass through the entire training dataset.",
-    },
+// Generic fallback question when API is unavailable
+function getFallbackQuiz(): QuizResponse {
+  return {
+    question: "What is the best way to check that you understand a topic?",
+    options: [
+      "Skip to the next section",
+      "Explain it in your own words or teach someone else",
+      "Read the material once",
+      "Memorize definitions only",
+    ],
+    correctAnswer: "Explain it in your own words or teach someone else",
+    correctIndex: 1,
+    hint: "Active recall and teaching help solidify understanding.",
+    explanation: "Explaining in your own words or teaching someone else tests and strengthens your understanding.",
   };
-  return (
-    fallbacks[sectionId] ||
-    fallbacks.intro
-  );
 }
 
 export async function POST(request: NextRequest) {
@@ -73,7 +41,7 @@ export async function POST(request: NextRequest) {
     const {
       sectionId,
       sectionContent,
-      topic = "Neural Networks Basics",
+      topic = "this topic",
       personalityPrompt = "be clear and helpful",
     } = body;
 
@@ -86,15 +54,12 @@ export async function POST(request: NextRequest) {
 
     const apiKey = process.env.MINIMAX_API_KEY;
     if (!apiKey) {
-      // Return fallback when no API key
-      const fallback = getFallbackQuiz(sectionId);
-      return NextResponse.json(fallback);
+      return NextResponse.json(getFallbackQuiz());
     }
 
     const content =
       sectionContent ||
-      getSectionById(sectionId)?.content ||
-      "Neural networks basics including neurons, layers, and training.";
+      "General study content. Generate a quiz that tests understanding of key concepts.";
 
     const systemPrompt = `You are a university tutor creating a multiple-choice quiz. Teaching style: ${personalityPrompt}.
 

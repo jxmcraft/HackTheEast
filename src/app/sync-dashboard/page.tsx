@@ -16,8 +16,10 @@ import {
   XCircle,
   MessageCircle,
   ExternalLink,
+  TrendingUp,
 } from "lucide-react";
 import { LessonRequest } from "@/components/lesson/LessonRequest";
+import { RecommendedLessons } from "@/components/dashboard/RecommendedLessons";
 import { cn } from "@/lib/utils";
 
 type CanvasCourse = { id: number; name: string; course_code?: string };
@@ -567,6 +569,22 @@ export default function SyncDashboardPage() {
             >
               <Settings className="h-4 w-4" />
             </Link>
+            <Link
+              href="/memory"
+              className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-[var(--muted)]"
+              aria-label="Agent memory"
+            >
+              <Brain className="h-4 w-4" />
+              <span className="hidden sm:inline">Memory</span>
+            </Link>
+            <Link
+              href="/progress"
+              className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-[var(--muted)]"
+              aria-label="Learning progress"
+            >
+              <TrendingUp className="h-4 w-4" />
+              <span className="hidden sm:inline">Progress</span>
+            </Link>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <button
@@ -693,6 +711,10 @@ export default function SyncDashboardPage() {
               Open StudyBuddy
             </Link>
           </div>
+        </section>
+
+        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 md:p-6">
+          <RecommendedLessons />
         </section>
 
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 md:p-6">

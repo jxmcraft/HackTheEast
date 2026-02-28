@@ -32,6 +32,8 @@ export type FallbackParams = {
   contextHint?: string;
   mode: LearningMode;
   preferences: UserPreferences;
+  /** Phase 5: formatted student memory context for personalization */
+  studentContext?: string;
 };
 
 export type FallbackResult = {
@@ -53,7 +55,7 @@ function buildSourcesFromMaterials(materials: RetrievedMaterial[]): Source[] {
 }
 
 export async function generateLessonWithFallback(params: FallbackParams): Promise<FallbackResult> {
-  const { topic, courseId, userId, contextHint, mode, preferences } = params;
+  const { topic, courseId, userId, contextHint, mode, preferences, studentContext } = params;
   const queryTopic = contextHint ? `${topic}. ${contextHint}` : topic;
 
   const materials = await retrieveRelevantMaterials({
@@ -69,7 +71,7 @@ export async function generateLessonWithFallback(params: FallbackParams): Promis
   if (materials.length > 0 && topScore >= SIMILARITY_STRONG) {
     const preparedContext = prepareContextForLLM(materials);
     const sources = buildSourcesFromMaterials(materials);
-    const content = await generateByMode(mode, topic, preparedContext, materials, preferences);
+    const content = await generateByMode(mode, topic, preparedContext, materials, preferences, studentContext);
     return {
       success: true,
       content,
@@ -84,7 +86,7 @@ export async function generateLessonWithFallback(params: FallbackParams): Promis
   if (materials.length > 0 && topScore >= SIMILARITY_PARTIAL) {
     const preparedContext = prepareContextForLLM(materials);
     const sources = buildSourcesFromMaterials(materials);
-    const content = await generateByMode(mode, topic, preparedContext, materials, preferences);
+    const content = await generateByMode(mode, topic, preparedContext, materials, preferences, studentContext);
     return {
       success: true,
       content,
@@ -112,7 +114,7 @@ export async function generateLessonWithFallback(params: FallbackParams): Promis
       metadata: { title: r.title, url: r.url },
       similarity: r.relevance ?? 0.7,
     }));
-    const content = await generateByMode(mode, topic, combinedContext, materialsFromWeb, preferences);
+    const content = await generateByMode(mode, topic, combinedContext, materialsFromWeb, preferences, studentContext);
     const sources: Source[] = webResults.map((r) => ({ title: r.title, url: r.url, relevance: r.relevance }));
     return {
       success: true,
@@ -126,7 +128,7 @@ export async function generateLessonWithFallback(params: FallbackParams): Promis
   }
 
   // Tier 1: General knowledge
-  const content = await generateByMode(mode, topic, GENERAL_KNOWLEDGE_CONTEXT, [], preferences);
+  const content = await generateByMode(mode, topic, GENERAL_KNOWLEDGE_CONTEXT, [], preferences, studentContext);
   return {
     success: true,
     content,
@@ -143,15 +145,16 @@ async function generateByMode(
   topic: string,
   context: string,
   materials: RetrievedMaterial[],
-  preferences: UserPreferences
+  preferences: UserPreferences,
+  studentContext?: string
 ): Promise<unknown> {
   if (mode === "text") {
-    return generateTextLesson({ topic, context, materials, userPreferences: preferences });
+    return generateTextLesson({ topic, context, materials, userPreferences: preferences, studentContext });
   }
   if (mode === "slides") {
-    return generateSlidesLesson({ topic, context, materials, userPreferences: preferences });
+    return generateSlidesLesson({ topic, context, materials, userPreferences: preferences, studentContext });
   }
-  return generateAudioLesson({ topic, context, materials, userPreferences: preferences });
+  return generateAudioLesson({ topic, context, materials, userPreferences: preferences, studentContext });
 }
 
 export { getCourseUuid };

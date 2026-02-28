@@ -46,6 +46,12 @@ export default async function SettingsPage() {
         </Link>
         {" "}to link your avatar and chatbot to this account.
       </p>
+      <p className="text-sm text-[var(--muted-foreground)]">
+        <Link href="/settings/memories" className="underline hover:no-underline">
+          Learning memories
+        </Link>
+        {" "}— view, edit, or export what the app remembers about your learning.
+      </p>
     </main>
   );
 }
