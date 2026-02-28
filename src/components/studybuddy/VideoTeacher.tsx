@@ -83,10 +83,10 @@ export default function VideoTeacher({
   const [sidebarMode, setSidebarMode] = useState<"chat" | "practice">("chat");
 
   const userData = getUserData();
-  const avatarName = userData?.name || "Tutor";
-  const avatarConfig = userData?.avatarConfig || {};
+  const avatarName = userData?.avatarProfile.avatarName || "Tutor";
+  const avatarConfig = userData?.avatarProfile.avatarConfig || {};
   const [personalityPrompt, setPersonalityPrompt] = useState(
-    () => userData?.personalityPrompt || "be clear and helpful"
+    () => userData?.avatarProfile.teachingStylePrompt || "be clear and helpful"
   );
   const [teachingStyleOpen, setTeachingStyleOpen] = useState(false);
   const [teachingStyleDraft, setTeachingStyleDraft] = useState("");
@@ -132,7 +132,7 @@ export default function VideoTeacher({
 
   useEffect(() => {
     const u = getUserData();
-    if (u?.personalityPrompt) setPersonalityPrompt(u.personalityPrompt);
+    if (u?.avatarProfile.teachingStylePrompt) setPersonalityPrompt(u.avatarProfile.teachingStylePrompt);
   }, [teachingStyleOpen]);
 
   useEffect(() => {
@@ -238,7 +238,15 @@ export default function VideoTeacher({
     const next = teachingStyleDraft.trim() || "be clear and helpful";
     setPersonalityPrompt(next);
     const u = getUserData();
-    if (u) saveUserData({ ...u, personalityPrompt: next });
+    if (u) {
+      saveUserData({
+        ...u,
+        avatarProfile: {
+          ...u.avatarProfile,
+          teachingStylePrompt: next,
+        },
+      });
+    }
     setTeachingStyleOpen(false);
   };
 

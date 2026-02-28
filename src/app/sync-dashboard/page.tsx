@@ -4,6 +4,9 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   BookOpen,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
   Loader2,
   RefreshCw,
@@ -33,6 +36,26 @@ type CanvasAssignment = {
   due_at: string | null;
   course_id: number;
 };
+type CanvasCalendarEvent = {
+  id: number | string;
+  title: string;
+  start_at: string;
+  end_at: string;
+  description?: string | null;
+  context_code?: string;
+  context_name?: string;
+  all_day?: boolean;
+  workflow_state?: string;
+};
+
+type CalendarItem = {
+  id: string;
+  kind: "event" | "assignment";
+  title: string;
+  startAt: string;
+  allDay?: boolean;
+  subtitle?: string;
+};
 type RecentLesson = {
   id: string;
   course_id_canvas: number;
@@ -61,6 +84,13 @@ export default function SyncDashboardPage() {
   const [retryingLessonId, setRetryingLessonId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [calendarEvents, setCalendarEvents] = useState<CanvasCalendarEvent[]>([]);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarError, setCalendarError] = useState<string | null>(null);
 
   async function loadProfile() {
     try {
@@ -125,6 +155,51 @@ export default function SyncDashboardPage() {
   useEffect(() => {
     loadStoredSync();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCalendarEvents() {
+      setCalendarLoading(true);
+      setCalendarError(null);
+      const year = calendarMonth.getFullYear();
+      const month = calendarMonth.getMonth();
+      const start = new Date(year, month, 1);
+      const end = new Date(year, month + 1, 0);
+      const startDate = start.toISOString().slice(0, 10);
+      const endDate = end.toISOString().slice(0, 10);
+      try {
+        const res = await fetch(
+          `/api/canvas/calendar?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`
+        );
+        const text = await res.text();
+        let data: CanvasCalendarEvent[] | { error?: string } = [];
+        try {
+          data = JSON.parse(text) as typeof data;
+        } catch {
+          data = [];
+        }
+        if (!res.ok) {
+          const err = (data as { error?: string })?.error ?? "Failed to load calendar";
+          throw new Error(err);
+        }
+        if (!cancelled) {
+          setCalendarEvents(Array.isArray(data) ? data : []);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setCalendarEvents([]);
+          setCalendarError(e instanceof Error ? e.message : "Failed to load calendar");
+        }
+      } finally {
+        if (!cancelled) setCalendarLoading(false);
+      }
+    }
+
+    loadCalendarEvents();
+    return () => {
+      cancelled = true;
+    };
+  }, [calendarMonth]);
 
   /** Poll sync status and update UI; call again if still running. Used after starting sync or when reconnecting after reload. */
   function pollSyncStatus() {
@@ -261,6 +336,78 @@ export default function SyncDashboardPage() {
     iso ? new Date(iso).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }) : null;
   const formatDate = (s: string | null) =>
     s ? new Date(s).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }) : "—";
+  const toLocalDateKey = (date: Date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+  const monthLabel = calendarMonth.toLocaleString(undefined, { month: "long", year: "numeric" });
+
+  const daysInMonth = new Date(
+    calendarMonth.getFullYear(),
+    calendarMonth.getMonth() + 1,
+    0
+  ).getDate();
+  const firstWeekday = new Date(
+    calendarMonth.getFullYear(),
+    calendarMonth.getMonth(),
+    1
+  ).getDay();
+  const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  const assignmentItems: CalendarItem[] = assignments
+    .filter((assignment) => assignment.due_at)
+    .map((assignment) => {
+      const courseName = courses.find((course) => course.id === assignment.course_id)?.name;
+      return {
+        id: `assignment-${assignment.course_id}-${assignment.id}`,
+        kind: "assignment",
+        title: assignment.name,
+        startAt: assignment.due_at as string,
+        allDay: false,
+        subtitle: courseName ?? `Course ${assignment.course_id}`,
+      };
+    });
+
+  const eventItems: CalendarItem[] = calendarEvents.map((event) => ({
+    id: `event-${event.id}`,
+    kind: "event",
+    title: event.title,
+    startAt: event.start_at,
+    allDay: event.all_day,
+    subtitle: event.context_name ?? event.context_code,
+  }));
+
+  const mergedItems = [...eventItems, ...assignmentItems];
+
+  const eventMap = mergedItems.reduce<Record<string, CalendarItem[]>>((acc, item) => {
+    const dateKey = toLocalDateKey(new Date(item.startAt));
+    if (!acc[dateKey]) acc[dateKey] = [];
+    acc[dateKey].push(item);
+    return acc;
+  }, {});
+
+  const sortedEventMap = Object.fromEntries(
+    Object.entries(eventMap).map(([dateKey, items]) => [
+      dateKey,
+      items.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()),
+    ])
+  ) as Record<string, CalendarItem[]>;
+
+  const calendarCells: Array<{ date: Date; inMonth: boolean }> = [];
+  for (let i = 0; i < firstWeekday; i += 1) {
+    const d = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1 - (firstWeekday - i));
+    calendarCells.push({ date: d, inMonth: false });
+  }
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    calendarCells.push({ date: new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), day), inMonth: true });
+  }
+  while (calendarCells.length % 7 !== 0) {
+    const last = calendarCells[calendarCells.length - 1].date;
+    const next = new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1);
+    calendarCells.push({ date: next, inMonth: false });
+  }
 
   function lessonHref(l: RecentLesson) {
     const topicSlug = encodeURIComponent(l.topic.replace(/\s+/g, "-").slice(0, 80));
@@ -514,6 +661,107 @@ export default function SyncDashboardPage() {
           <p className="text-sm text-[var(--muted-foreground)]">
             Your tutor avatar, voice, and chatbot are saved in StudyBuddy. Open StudyBuddy and use &quot;Link to account&quot; on the content selection page to sync them to this account. Use &quot;Load from account&quot; to restore on another device.
           </p>
+        </section>
+
+        <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 md:p-6">
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-lg font-semibold">
+              <CalendarDays className="h-5 w-5 text-[var(--muted-foreground)]" />
+              Calendar
+            </h2>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setCalendarMonth(
+                    (prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1)
+                  )
+                }
+                className="rounded-lg border border-[var(--border)] p-2 hover:bg-[var(--muted)]"
+                aria-label="Previous month"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <p className="min-w-[160px] text-center text-sm font-medium">{monthLabel}</p>
+              <button
+                type="button"
+                onClick={() =>
+                  setCalendarMonth(
+                    (prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1)
+                  )
+                }
+                className="rounded-lg border border-[var(--border)] p-2 hover:bg-[var(--muted)]"
+                aria-label="Next month"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          {calendarLoading && (
+            <div className="mb-3 flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading calendar events...
+            </div>
+          )}
+          {calendarError && (
+            <div className="mb-3 rounded-lg border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+              {calendarError}
+            </div>
+          )}
+
+          <div className="grid grid-cols-7 gap-2 text-xs font-medium text-[var(--muted-foreground)]">
+            {weekdayLabels.map((label) => (
+              <div key={label} className="px-2 py-1">
+                {label}
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 grid grid-cols-7 gap-2">
+            {calendarCells.map(({ date, inMonth }, index) => {
+              const key = toLocalDateKey(date);
+              const dayEvents = sortedEventMap[key] ?? [];
+              return (
+                <div
+                  key={`${key}-${index}`}
+                  className={cn(
+                    "min-h-[120px] rounded-lg border border-[var(--border)] p-2",
+                    inMonth ? "bg-[var(--card)]" : "bg-[var(--muted)]/20 text-[var(--muted-foreground)]"
+                  )}
+                >
+                  <div className="mb-1 text-xs font-semibold">{date.getDate()}</div>
+                  <div className="space-y-1">
+                    {dayEvents.slice(0, 3).map((event) => (
+                      <div
+                        key={event.id}
+                        className={cn(
+                          "rounded px-1.5 py-1 text-[10px] leading-tight",
+                          event.kind === "assignment"
+                            ? "bg-purple-500/15 border border-purple-500/30"
+                            : "bg-[var(--muted)]"
+                        )}
+                      >
+                        <p className="truncate font-medium">{event.title}</p>
+                        {event.subtitle && (
+                          <p className="truncate text-[var(--muted-foreground)]">{event.subtitle}</p>
+                        )}
+                        <p className="truncate text-[var(--muted-foreground)]">
+                          {event.allDay
+                            ? "All day"
+                            : new Date(event.startAt).toLocaleTimeString(undefined, {
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                        </p>
+                      </div>
+                    ))}
+                    {dayEvents.length > 3 && (
+                      <p className="text-[10px] text-[var(--muted-foreground)]">+{dayEvents.length - 3} more</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </section>
 
         <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 md:p-6">

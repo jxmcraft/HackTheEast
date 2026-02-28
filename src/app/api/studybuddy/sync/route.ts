@@ -28,15 +28,37 @@ export async function GET() {
 
   const { data: prefs } = await supabase
     .from("user_preferences")
-    .select("studybuddy_data")
+    .select("studybuddy_data, studybuddy_user_profile, studybuddy_avatar_profile")
     .eq("id", user.id)
     .single();
 
-  const studybuddy_data = (prefs?.studybuddy_data as StudyBuddyUser | null) ?? null;
+  const legacyData = (prefs?.studybuddy_data as StudyBuddyUser | null) ?? null;
+  const userProfile = (prefs?.studybuddy_user_profile as StudyBuddyUser["userProfile"] | null) ?? null;
+  const avatarProfile = (prefs?.studybuddy_avatar_profile as StudyBuddyUser["avatarProfile"] | null) ?? null;
+  const studybuddy_data =
+    userProfile && avatarProfile
+      ? {
+          userProfile,
+          avatarProfile,
+          struggles: Array.isArray((legacyData as StudyBuddyUser | null)?.struggles)
+            ? (legacyData as StudyBuddyUser).struggles
+            : [],
+          lastTopic: (legacyData as StudyBuddyUser | null)?.lastTopic ?? "neural_networks",
+          lastSection: (legacyData as StudyBuddyUser | null)?.lastSection ?? "intro",
+          completedSections: Array.isArray((legacyData as StudyBuddyUser | null)?.completedSections)
+            ? (legacyData as StudyBuddyUser).completedSections
+            : [],
+          practiceResults: Array.isArray((legacyData as StudyBuddyUser | null)?.practiceResults)
+            ? (legacyData as StudyBuddyUser).practiceResults
+            : [],
+        }
+      : legacyData;
   const hasData =
     studybuddy_data &&
     typeof studybuddy_data === "object" &&
-    (studybuddy_data.name != null || Object.keys(studybuddy_data.avatarConfig || {}).length > 0);
+    ((studybuddy_data.userProfile?.name ?? "").trim().length > 0 ||
+      (studybuddy_data.avatarProfile?.avatarName ?? "").trim().length > 0 ||
+      Object.keys(studybuddy_data.avatarProfile?.avatarConfig || {}).length > 0);
 
   return NextResponse.json({
     linked: true,
@@ -69,9 +91,20 @@ export async function POST(request: NextRequest) {
 
   const payload = body as StudyBuddyUser;
   const studybuddy_data = {
-    name: payload.name ?? "",
-    avatarConfig: payload.avatarConfig ?? {},
-    personalityPrompt: payload.personalityPrompt ?? "",
+    userProfile: {
+      name: payload.userProfile?.name ?? "",
+      sex: payload.userProfile?.sex ?? "",
+      birthday: payload.userProfile?.birthday ?? "",
+      email: payload.userProfile?.email ?? "",
+      profilePicture: payload.userProfile?.profilePicture ?? "",
+    },
+    avatarProfile: {
+      avatarName: payload.avatarProfile?.avatarName ?? "",
+      avatarConfig: payload.avatarProfile?.avatarConfig ?? {},
+      teachingStylePrompt: payload.avatarProfile?.teachingStylePrompt ?? "",
+      tutorVoice:
+        payload.avatarProfile?.tutorVoice || payload.avatarProfile?.avatarConfig?.voiceId || "English_expressive_narrator",
+    },
     struggles: Array.isArray(payload.struggles) ? payload.struggles : [],
     lastTopic: payload.lastTopic ?? "neural_networks",
     lastSection: payload.lastSection ?? "intro",
@@ -88,7 +121,12 @@ export async function POST(request: NextRequest) {
   if (existing) {
     const { error } = await supabase
       .from("user_preferences")
-      .update({ studybuddy_data, updated_at: new Date().toISOString() })
+      .update({
+        studybuddy_data,
+        studybuddy_user_profile: studybuddy_data.userProfile,
+        studybuddy_avatar_profile: studybuddy_data.avatarProfile,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", user.id);
     if (error) {
       console.error("StudyBuddy sync update error:", error);
@@ -98,6 +136,8 @@ export async function POST(request: NextRequest) {
     const { error } = await supabase.from("user_preferences").insert({
       id: user.id,
       studybuddy_data,
+      studybuddy_user_profile: studybuddy_data.userProfile,
+      studybuddy_avatar_profile: studybuddy_data.avatarProfile,
     });
     if (error) {
       console.error("StudyBuddy sync insert error:", error);
