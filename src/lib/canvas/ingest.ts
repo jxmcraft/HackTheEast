@@ -74,6 +74,23 @@ export interface CanvasFile {
   url?: string;
 }
 
+/** Announcement (DiscussionTopic) from GET /api/v1/announcements */
+export interface CanvasAnnouncement {
+  id: number;
+  title: string;
+  message?: string;
+  posted_at?: string;
+  html_url?: string;
+  context_code?: string;
+}
+
+/** Folder from GET /api/v1/courses/:id/folders or /folders/:id */
+export interface CanvasFolder {
+  id: number;
+  name?: string;
+  parent_folder_id?: number;
+}
+
 export class CanvasAPIClient {
   private apiBase: string;
   private token: string;
@@ -181,6 +198,97 @@ export class CanvasAPIClient {
       `/courses/${courseId}/assignments/${assignmentId}`
     );
   }
+
+  /**
+   * List announcements for a course.
+   * GET /api/v1/announcements?context_codes[]=course_<id>
+   * Uses a wide date range to fetch all announcements.
+   */
+  async getAnnouncements(courseId: string): Promise<CanvasAnnouncement[]> {
+    return this.fetchAll<CanvasAnnouncement>("/announcements", {
+      "context_codes[]": `course_${courseId}`,
+      start_date: "2000-01-01",
+      end_date: "2030-12-31",
+      per_page: "100",
+    });
+  }
+
+  /**
+   * Get the root folder for a course (course files root).
+   * GET /api/v1/courses/:course_id/folders/root
+   */
+  async getRootFolder(courseId: string): Promise<CanvasFolder> {
+    return this.fetch<CanvasFolder>(
+      `/courses/${encodeURIComponent(courseId)}/folders/root`
+    );
+  }
+
+  /**
+   * List all folders in a course (flat list including root and subfolders).
+   * GET /api/v1/courses/:course_id/folders
+   */
+  async getCourseFolders(courseId: string): Promise<CanvasFolder[]> {
+    return this.fetchAll<CanvasFolder>(
+      `/courses/${encodeURIComponent(courseId)}/folders`,
+      { per_page: "100" }
+    );
+  }
+
+  /**
+   * List files in a folder. Paginated.
+   * GET /api/v1/folders/:id/files
+   */
+  async getFolderFiles(folderId: number): Promise<CanvasFile[]> {
+    return this.fetchAll<CanvasFile>(`/folders/${folderId}/files`, {
+      per_page: "100",
+    });
+  }
+
+  /**
+   * List all files in a course (root folder + every subfolder).
+   * Uses getRootFolder + getCourseFolders then getFolderFiles for each.
+   */
+  async getAllCourseFiles(courseId: string): Promise<CanvasFile[]> {
+    const root = await this.getRootFolder(courseId);
+    const folders = await this.getCourseFolders(courseId);
+    const folderIds = [root.id, ...folders.map((f) => f.id)];
+    const seen = new Set<number>();
+    const files: CanvasFile[] = [];
+    for (const fid of folderIds) {
+      if (seen.has(fid)) continue;
+      seen.add(fid);
+      const list = await this.getFolderFiles(fid);
+      for (const f of list) {
+        if (!seen.has(f.id)) {
+          seen.add(f.id);
+          files.push(f);
+        }
+      }
+    }
+    return files;
+  }
+
+  /**
+   * Get the current user's role in a course (for calendar: skip extracting dates when TA).
+   * GET /api/v1/courses/:course_id/enrollments returns current user's enrollments.
+   */
+  async getCourseEnrollmentRole(courseId: string): Promise<"student" | "teacher" | "ta" | null> {
+    try {
+      const list = await this.fetchAll<{ type: string }>(
+        `/courses/${encodeURIComponent(courseId)}/enrollments`,
+        { per_page: "10" }
+      );
+      const enrollment = list[0];
+      if (!enrollment?.type) return null;
+      const t = enrollment.type.toLowerCase();
+      if (t === "taenrollment") return "ta";
+      if (t === "teacherenrollment" || t === "designerenrollment") return "teacher";
+      if (t === "studentenrollment" || t === "observerenrollment") return "student";
+      return null;
+    } catch {
+      return null;
+    }
+  }
 }
 
 export interface CanvasCourse {
@@ -287,7 +395,34 @@ export async function ingestCourseMaterials(
 
   const modules = await client.getCourseModules(courseId);
 
-  // Count total items we will report progress for: front page (if any) + each Page/Assignment/File in every module.
+  // Fetch announcements and all course files early so we can count them for progress.
+  // If unauthorized (403), ignore and continue without that data.
+  function isUnauthorized(err: unknown): boolean {
+    const msg = err instanceof Error ? err.message : String(err);
+    return /403|unauthorized|user not authorized/i.test(msg);
+  }
+  let announcements: CanvasAnnouncement[] = [];
+  let allCourseFiles: CanvasFile[] = [];
+  try {
+    try {
+      announcements = await client.getAnnouncements(courseId);
+    } catch (annErr) {
+      if (!isUnauthorized(annErr)) throw annErr;
+      console.info("Skipping announcements (Canvas returned 403/unauthorized for this token).");
+    }
+    try {
+      allCourseFiles = await client.getAllCourseFiles(courseId);
+    } catch (filesErr) {
+      if (!isUnauthorized(filesErr)) throw filesErr;
+      console.info("Skipping course files (Canvas returned 403/unauthorized for this token).");
+    }
+  } catch (e) {
+    if (!isUnauthorized(e)) {
+      console.warn("Failed to fetch announcements or course files:", e instanceof Error ? e.message : e);
+    }
+  }
+
+  // Count total items we will report progress for: front page (if any) + announcements + all files + each Page/Assignment/File in every module.
   let itemTotal = 0;
   try {
     const frontPage = await client.getFrontPage(courseId);
@@ -295,6 +430,8 @@ export async function ingestCourseMaterials(
   } catch {
     // ignore
   }
+  itemTotal += announcements.length;
+  itemTotal += allCourseFiles.length;
   for (const mod of modules) {
     const items =
       mod.items && mod.items.length > 0
@@ -378,6 +515,79 @@ export async function ingestCourseMaterials(
     }
   } catch (err) {
     console.warn("Front page fetch skipped:", err instanceof Error ? err.message : err);
+  }
+
+  // Ingest all announcements (Canvas API: GET /api/v1/announcements)
+  for (const announcement of announcements) {
+    report(`Reading announcement: ${announcement.title}`);
+    const text = extractTextFromHTML(announcement.message ?? "");
+    if (!text.trim()) continue;
+    await addMaterial(
+      `announcement-${courseId}-${announcement.id}`,
+      "page",
+      text,
+      {
+        title: announcement.title,
+        url: announcement.html_url,
+        created_at: announcement.posted_at,
+        source: "canvas",
+        module_name: "Announcements",
+      }
+    );
+  }
+
+  // Ingest all course files (Canvas API: GET /api/v1/courses/:id/folders, GET /api/v1/folders/:id/files).
+  // Each file's content (or title) is added as a material; dates in this text are later scanned and added to the calendar.
+  for (const file of allCourseFiles) {
+    const title = file.display_name ?? file.filename ?? `File ${file.id}`;
+    report(`Reading file: ${title}`);
+    const isPdf = /\.pdf$/i.test(file.filename ?? "") || /\.pdf$/i.test(file.url ?? "");
+    const isPptx = /\.pptx$/i.test(file.filename ?? "") || /\.pptx$/i.test(file.url ?? "");
+    const isDocx = /\.docx$/i.test(file.filename ?? "") || /\.docx$/i.test(file.url ?? "");
+    let contentText = title;
+    let fileMeta: IngestedMaterial["metadata"] = {
+      title,
+      url: file.url,
+      created_at: file.created_at,
+      updated_at: file.updated_at,
+      source: "canvas",
+      module_name: "Course files",
+    };
+    if ((isPdf || isPptx || isDocx) && file.url) {
+      try {
+        const doc = await fetchAndExtractDocument(file.url, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (doc?.text && doc.text.length >= 50) contentText = doc.text;
+        if (doc?.buffer && options?.uploadFile) {
+          const fileName = file.filename ?? file.display_name ?? title;
+          try {
+            const storagePath = await options.uploadFile({
+              canvasItemId: `file-${courseId}-${file.id}`,
+              buffer: doc.buffer,
+              fileName,
+              contentType: doc.contentType,
+            });
+            fileMeta = {
+              ...fileMeta,
+              file_storage_path: storagePath,
+              file_name: fileName,
+              file_content_type: doc.contentType,
+            };
+          } catch (e) {
+            console.warn(`Failed to upload course file ${file.id}:`, e instanceof Error ? e.message : e);
+            fileMeta = { ...fileMeta, upload_failed: true };
+          }
+        }
+      } catch (e) {
+        console.warn(`Failed to extract course file ${file.id}:`, e instanceof Error ? e.message : e);
+      }
+    }
+    const textToStore =
+      typeof contentText === "string" && !/^https?:\/\/[^\s]+\.(pdf|pptx|docx)(\?|$)/i.test(contentText.trim())
+        ? contentText
+        : title;
+    await addMaterial(`file-${courseId}-${file.id}`, "file", textToStore, fileMeta);
   }
 
   for (const mod of modules) {

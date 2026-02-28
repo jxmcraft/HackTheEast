@@ -379,16 +379,16 @@ export default function SyncDashboardPage() {
 
   const isLoading = loading !== "idle";
   const formatLastSync = (iso: string | null) =>
-    iso ? new Date(iso).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }) : null;
+    iso ? new Date(iso).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" }) : null;
   const formatDate = (s: string | null) =>
-    s ? new Date(s).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }) : "—";
+    s ? new Date(s).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" }) : "—";
   const toLocalDateKey = (date: Date) => {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, "0");
     const d = String(date.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   };
-  const monthLabel = calendarMonth.toLocaleString(undefined, { month: "long", year: "numeric" });
+  const monthLabel = calendarMonth.toLocaleString("en-US", { month: "long", year: "numeric" });
   const startOfWeek = (date: Date) => {
     const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     d.setDate(d.getDate() - d.getDay());
@@ -426,7 +426,7 @@ export default function SyncDashboardPage() {
     streak += 1;
     streakCursor.setDate(streakCursor.getDate() - 1);
   }
-  const weekRangeLabel = `${weekStart.toLocaleDateString(undefined, { month: "short", day: "numeric" })} - ${weekEnd.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+  const weekRangeLabel = `${weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${weekEnd.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
   const weekDayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const weekDayStats = weekDayLabels.map((label, index) => {
     const dayStart = new Date(weekStart);
@@ -438,7 +438,7 @@ export default function SyncDashboardPage() {
       const created = new Date(lesson.created_at);
       return created >= dayStart && created <= dayEnd;
     }).length;
-    return { label, count, dateLabel: dayStart.toLocaleDateString(undefined, { month: "short", day: "numeric" }) };
+    return { label, count, dateLabel: dayStart.toLocaleDateString("en-US", { month: "short", day: "numeric" }) };
   });
   const weekDayLessons = weekDayLabels.map((label, index) => {
     const dayStart = new Date(weekStart);
@@ -455,7 +455,7 @@ export default function SyncDashboardPage() {
 
     return {
       label,
-      dateLabel: dayStart.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+      dateLabel: dayStart.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
       lessons,
     };
   });
@@ -882,7 +882,7 @@ export default function SyncDashboardPage() {
                         <p className="truncate text-[var(--muted-foreground)]">
                           {event.allDay
                             ? "All day"
-                            : new Date(event.startAt).toLocaleTimeString(undefined, {
+                            : new Date(event.startAt).toLocaleTimeString("en-US", {
                                 hour: "numeric",
                                 minute: "2-digit",
                               })}

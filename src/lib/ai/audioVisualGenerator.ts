@@ -34,7 +34,7 @@ function slideSegmentDuration(segmentText: string): number {
 /**
  * Generate audio-visual lesson by mode:
  * - podcast: MiniMax structure + MiniMax TTS (audio only); slides use placeholders.
- * - slides: MiniMax structure + Featherless images only; no audio.
+ * - slides: MiniMax structure + MiniMax Image for slide images + MiniMax TTS for narrator audio (same voice as podcast).
  */
 export async function generateAudioVisualLesson(request: GenerationRequest): Promise<GenerationResponse> {
   const { topic, courseId, context, avatarStyle, mode, voiceId } = request;
@@ -80,6 +80,18 @@ export async function generateAudioVisualLesson(request: GenerationRequest): Pro
 
     const imageUrls =
       isSlides ? await generateAllSlideImagesMinimax(slides) : new Map<number, string>();
+
+    if (isSlides && !audioUrl) {
+      console.log("Step 3 (slides): Generating narrator audio with MiniMax TTS (podcast voice)...");
+      const audioBuffer = await generateAudioMinimax(lessonStructure.script, voiceId);
+      if (audioBuffer) {
+        try {
+          audioUrl = await uploadAudioToStorage(audioBuffer, lessonId);
+        } catch (uploadErr) {
+          console.warn("[audioVisual] Slide deck audio upload failed:", uploadErr);
+        }
+      }
+    }
 
     const slidesWithImages: SlideWithImage[] = slides.map((slide) => ({
       ...slide,

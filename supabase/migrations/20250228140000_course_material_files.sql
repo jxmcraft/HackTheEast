@@ -18,6 +18,8 @@ CREATE INDEX IF NOT EXISTS idx_course_material_files_course_id
 
 ALTER TABLE public.course_material_files ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated users can read course_material_files" ON public.course_material_files;
+DROP POLICY IF EXISTS "Authenticated users can manage course_material_files" ON public.course_material_files;
 CREATE POLICY "Authenticated users can read course_material_files"
   ON public.course_material_files FOR SELECT TO authenticated USING (true);
 
