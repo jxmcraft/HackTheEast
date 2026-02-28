@@ -23,12 +23,14 @@ export function getSavedLectures(): SavedLecture[] {
     return Array.isArray(arr)
       ? arr.filter(
           (x): x is SavedLecture =>
-            x &&
-            typeof x === "object" &&
-            typeof (x as SavedLecture).sectionId === "string" &&
-            typeof (x as SavedLecture).sectionTitle === "string" &&
-            typeof (x as SavedLecture).topic === "string" &&
-            typeof (x as SavedLecture).savedAt === "string"
+            Boolean(
+              x &&
+                typeof x === "object" &&
+                typeof (x as SavedLecture).sectionId === "string" &&
+                typeof (x as SavedLecture).sectionTitle === "string" &&
+                typeof (x as SavedLecture).topic === "string" &&
+                typeof (x as SavedLecture).savedAt === "string"
+            )
         )
       : [];
   } catch {

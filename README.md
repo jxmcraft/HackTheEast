@@ -26,18 +26,11 @@ Next.js 14 (App Router) + TypeScript + Tailwind CSS + Supabase. Syncs courses, c
 
 4. **Run the app**
 
-   Run Next.js: `bun dev`. Next.js: [http://localhost:3000](http://localhost:3000).
+   Run Next.js: `bun dev`. Open [http://localhost:3000](http://localhost:3000).
 
-   LiteLLM is installed automatically when you run `bun install` (requires Python and pip). To install it manually: `bun run setup-litellm`.
+   **Embeddings:** By default the app uses the local in-process model (all-MiniLM-L6-v2, 384 dimensions). Optional: set `EMBEDDING_PROVIDER=openai` and `OPENAI_EMBEDDING_API_KEY` for OpenAI, or `EMBEDDING_PROVIDER=minimax` with `MINIMAX_API_KEY` and `MINIMAX_GROUP_ID` for MiniMax.
 
-   Either run both in one go: `bun run dev:all`, or in two terminals: `bun run proxy` then `bun dev`.
-
-   - Next.js: [http://localhost:3000](http://localhost:3000)
-   - LiteLLM proxy: http://localhost:4000
-
-   Set LiteLLM vars in your env: `LITELLM_EMBEDDING_API_BASE=http://localhost:4000`, `LITELLM_EMBEDDING_API_KEY=sk-1234` (match `master_key` in `litellm/config.yaml`), `LITELLM_EMBEDDING_MODEL=minimax-embed`. For the proxy (run `bun run proxy`): set `MINIMAX_API_KEY`, `MINIMAX_GROUP_ID`, and `OPENAI_API_KEY` (same as `MINIMAX_API_KEY`) so embeddings work. See `litellm/config.yaml` for details.
-
-   **Test embeddings:** With app (and optionally proxy) running, open http://localhost:3000/api/embedding-test. You should get `{ "ok": true, "dimensions": 384, ... }` when using the local model (all-MiniLM-L6-v2), or the proxy's dimensions when using LiteLLM.
+   **Test embeddings:** With the app running, open http://localhost:3000/api/embedding-test. You should get `{ "ok": true, "dimensions": 384, ... }` when using the local model.
 
    **Lesson generation (Phase 3):** Set `FEATHERLESS_API_KEY` in `.env.local` for chat completions (works in Hong Kong and globally; no OpenAI required). Optional: `FEATHERLESS_CHAT_MODEL` (default: `Qwen/Qwen2.5-7B-Instruct`). Alternatively set `OPENAI_API_KEY` for OpenAI.
 
@@ -76,9 +69,7 @@ Override with:
 ## Scripts
 
 - `bun dev` – Next.js dev server
-- `bun run dev:all` – Next.js and LiteLLM proxy together
-- `bun run proxy` – LiteLLM proxy only (port 4000)
-- `bun run setup-litellm` – Install LiteLLM proxy (runs automatically after `bun install`)
+- `bun run dev:all` – Same as `bun dev`
 - `bun run build` – Production build
 - `bun run start` – Start production server
 - `bun run lint` – Run ESLint

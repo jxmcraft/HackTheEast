@@ -1,6 +1,6 @@
 /**
  * Embedding generation and storage for course materials.
- * All requests go through LiteLLM proxy (model from LITELLM_EMBEDDING_MODEL; configure Minimax/Featherless in litellm/config.yaml).
+ * Uses local, OpenAI, or MiniMax embeddings (see EMBEDDING_PROVIDER and keys in env).
  */
 
 import { createHash } from "crypto";

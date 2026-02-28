@@ -135,7 +135,6 @@ export default function SyncDashboardPage() {
   async function loadStoredSync() {
     try {
       const res = await fetch("/api/sync");
-      const contentType = res.headers.get("content-type") ?? "";
       const text = await res.text();
       if (!res.ok) return;
       let data: { courses?: unknown[]; assignments?: unknown[] };
@@ -303,7 +302,6 @@ export default function SyncDashboardPage() {
     let willPoll = false;
     try {
       const res = await fetch("/api/sync", { method: "POST" });
-      const contentType = res.headers.get("content-type") ?? "";
       const text = await res.text();
       let data: { courses?: unknown[]; assignments?: unknown[]; error?: string; jobId?: string };
       try {

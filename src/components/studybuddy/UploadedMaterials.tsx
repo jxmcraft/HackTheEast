@@ -28,7 +28,7 @@ export function getLocalUploads(): UploadedDoc[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const arr = JSON.parse(raw) as unknown[];
-    return Array.isArray(arr) ? arr.filter((u): u is UploadedDoc => u && typeof u === "object" && "id" in u && "name" in u) : [];
+    return Array.isArray(arr) ? arr.filter((u): u is UploadedDoc => Boolean(u && typeof u === "object" && "id" in u && "name" in u)) : [];
   } catch {
     return [];
   }
