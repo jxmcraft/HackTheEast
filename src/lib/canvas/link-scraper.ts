@@ -21,6 +21,8 @@ export type LinkedPageResult = {
   fileBinary?: Buffer;
   fileContentType?: string;
   fileFileName?: string;
+  /** True when this result was fetched via Canvas API (resolveCanvasPage); treat as course page, not "linked". */
+  isCanvasPage?: boolean;
 };
 
 /** Return true if the URL looks like a document we can download and extract. */
@@ -158,9 +160,11 @@ export async function crawlLinkedPages(
     visited.add(normalized);
 
     let page: LinkedPageResult | null = null;
+    let fromCanvasApi = false;
 
     if (options.resolveCanvasPage) {
       page = await options.resolveCanvasPage(url);
+      if (page) fromCanvasApi = true;
     }
     if (!page && isDocumentUrl(url)) {
       const doc = await fetchAndExtractDocument(url, { headers: options.documentHeaders });
@@ -201,17 +205,20 @@ export async function crawlLinkedPages(
       fileBinary: page.fileBinary,
       fileContentType: page.fileContentType,
       fileFileName: page.fileFileName,
+      isCanvasPage: fromCanvasApi,
     });
 
+    // Only follow links to document files (PDF/DOCX/PPTX). Do not recursively fetch other HTML pages.
     if (depth >= maxDepth) continue;
     const htmlForLinks = page.rawHtml ?? "";
     const nestedLinks = extractLinksFromHTML(String(htmlForLinks), String(page.url ?? ""));
-    const toEnqueue = nestedLinks
+    const documentLinksOnly = nestedLinks.filter((u) => isDocumentUrl(u));
+    const toEnqueue = documentLinksOnly
       .filter((u) => {
         const n = u.replace(/#.*$/, "").replace(/\/$/, "");
         return !visited.has(n);
       })
-      .slice(0, 15);
+      .slice(0, 20);
     for (const u of toEnqueue) {
       queue.push({ url: u, depth: depth + 1 });
     }

@@ -341,17 +341,24 @@ export async function ingestCourseMaterials(
             documentHeaders: { Authorization: `Bearer ${accessToken}` },
           });
           for (const lp of linkedPages) {
-            let meta: IngestedMaterial["metadata"] = {
-              title: lp.title,
-              url: lp.url,
-              source: "linked",
-              source_canvas_item_id: `front-page-${courseId}-${frontPage.page_id ?? "front"}`,
-              module_name: "Front page",
-            };
+            const isCanvas = lp.isCanvasPage === true;
+            const parsed = parseCanvasPageUrl(lp.url, baseUrl);
+            const canvasItemId = isCanvas && parsed
+              ? `page-${parsed.courseId}-${parsed.pageSlug}`
+              : linkedPageCanvasId(courseId, lp.url);
+            let meta: IngestedMaterial["metadata"] = isCanvas
+              ? { title: lp.title, url: lp.url, source: "canvas", module_name: "Front page" }
+              : {
+                  title: lp.title,
+                  url: lp.url,
+                  source: "linked",
+                  source_canvas_item_id: `front-page-${courseId}-${frontPage.page_id ?? "front"}`,
+                  module_name: "Front page",
+                };
             if (lp.fileBinary && options?.uploadFile && lp.fileFileName && lp.fileContentType) {
               try {
                 const storagePath = await options.uploadFile({
-                  canvasItemId: linkedPageCanvasId(courseId, lp.url),
+                  canvasItemId,
                   buffer: lp.fileBinary,
                   fileName: lp.fileFileName,
                   contentType: lp.fileContentType,
@@ -361,7 +368,7 @@ export async function ingestCourseMaterials(
                 console.warn("Upload linked file failed:", e instanceof Error ? e.message : e);
               }
             }
-            await addMaterial(linkedPageCanvasId(courseId, lp.url), "page", lp.text, meta);
+            await addMaterial(canvasItemId, "page", lp.text, meta);
           }
         } catch (linkErr) {
           console.warn("Link crawl failed for front page:", linkErr instanceof Error ? linkErr.message : linkErr);
@@ -418,17 +425,24 @@ export async function ingestCourseMaterials(
                 documentHeaders: { Authorization: `Bearer ${accessToken}` },
               });
               for (const lp of linkedPages) {
-                let meta: IngestedMaterial["metadata"] = {
-                  title: lp.title,
-                  url: lp.url,
-                  source: "linked",
-                  source_canvas_item_id: `page-${courseId}-${page.page_id ?? pageId}`,
-                  module_name: baseMeta.module_name,
-                };
+                const isCanvas = lp.isCanvasPage === true;
+                const parsed = parseCanvasPageUrl(lp.url, baseUrl);
+                const canvasItemId = isCanvas && parsed
+                  ? `page-${parsed.courseId}-${parsed.pageSlug}`
+                  : linkedPageCanvasId(courseId, lp.url);
+                let meta: IngestedMaterial["metadata"] = isCanvas
+                  ? { title: lp.title, url: lp.url, source: "canvas", module_name: baseMeta.module_name }
+                  : {
+                      title: lp.title,
+                      url: lp.url,
+                      source: "linked",
+                      source_canvas_item_id: `page-${courseId}-${page.page_id ?? pageId}`,
+                      module_name: baseMeta.module_name,
+                    };
                 if (lp.fileBinary && options?.uploadFile && lp.fileFileName && lp.fileContentType) {
                   try {
                     const storagePath = await options.uploadFile({
-                      canvasItemId: linkedPageCanvasId(courseId, lp.url),
+                      canvasItemId,
                       buffer: lp.fileBinary,
                       fileName: lp.fileFileName,
                       contentType: lp.fileContentType,
@@ -438,7 +452,7 @@ export async function ingestCourseMaterials(
                     console.warn("Upload linked file failed:", e instanceof Error ? e.message : e);
                   }
                 }
-                await addMaterial(linkedPageCanvasId(courseId, lp.url), "page", lp.text, meta);
+                await addMaterial(canvasItemId, "page", lp.text, meta);
               }
             } catch (linkErr) {
               console.warn(
@@ -477,17 +491,24 @@ export async function ingestCourseMaterials(
                 documentHeaders: { Authorization: `Bearer ${accessToken}` },
               });
               for (const lp of linkedPages) {
-                let meta: IngestedMaterial["metadata"] = {
-                  title: lp.title,
-                  url: lp.url,
-                  source: "linked",
-                  source_canvas_item_id: `assignment-${courseId}-${assignment.id}`,
-                  module_name: baseMeta.module_name,
-                };
+                const isCanvas = lp.isCanvasPage === true;
+                const parsed = parseCanvasPageUrl(lp.url, baseUrl);
+                const canvasItemId = isCanvas && parsed
+                  ? `page-${parsed.courseId}-${parsed.pageSlug}`
+                  : linkedPageCanvasId(courseId, lp.url);
+                let meta: IngestedMaterial["metadata"] = isCanvas
+                  ? { title: lp.title, url: lp.url, source: "canvas", module_name: baseMeta.module_name }
+                  : {
+                      title: lp.title,
+                      url: lp.url,
+                      source: "linked",
+                      source_canvas_item_id: `assignment-${courseId}-${assignment.id}`,
+                      module_name: baseMeta.module_name,
+                    };
                 if (lp.fileBinary && options?.uploadFile && lp.fileFileName && lp.fileContentType) {
                   try {
                     const storagePath = await options.uploadFile({
-                      canvasItemId: linkedPageCanvasId(courseId, lp.url),
+                      canvasItemId,
                       buffer: lp.fileBinary,
                       fileName: lp.fileFileName,
                       contentType: lp.fileContentType,
@@ -497,7 +518,7 @@ export async function ingestCourseMaterials(
                     console.warn("Upload linked file failed:", e instanceof Error ? e.message : e);
                   }
                 }
-                await addMaterial(linkedPageCanvasId(courseId, lp.url), "page", lp.text, meta);
+                await addMaterial(canvasItemId, "page", lp.text, meta);
               }
             } catch (linkErr) {
               console.warn(
