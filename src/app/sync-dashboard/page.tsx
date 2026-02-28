@@ -5,9 +5,10 @@ import Link from "next/link";
 import {
   BookOpen,
   CalendarDays,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ClipboardList,
+  ChevronUp,
   Loader2,
   RefreshCw,
   PlusCircle,
@@ -17,14 +18,6 @@ import {
   MessageCircle,
   ExternalLink,
 } from "lucide-react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { LessonRequest } from "@/components/lesson/LessonRequest";
 import { cn } from "@/lib/utils";
 
@@ -81,9 +74,9 @@ export default function SyncDashboardPage() {
     currentCourseChunks?: number;
     message?: string;
   } | null>(null);
-  const [retryingLessonId, setRetryingLessonId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [weekOffset, setWeekOffset] = useState(0);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -91,6 +84,7 @@ export default function SyncDashboardPage() {
   const [calendarEvents, setCalendarEvents] = useState<CanvasCalendarEvent[]>([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [calendarError, setCalendarError] = useState<string | null>(null);
+  const [expandedCourses, setExpandedCourses] = useState<Set<number>>(new Set());
 
   async function loadProfile() {
     try {
@@ -341,6 +335,77 @@ export default function SyncDashboardPage() {
     return `${y}-${m}-${d}`;
   };
   const monthLabel = calendarMonth.toLocaleString(undefined, { month: "long", year: "numeric" });
+  const startOfWeek = (date: Date) => {
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    d.setDate(d.getDate() - d.getDay());
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+  const endOfWeek = (date: Date) => {
+    const d = new Date(date);
+    d.setDate(d.getDate() + 6);
+    d.setHours(23, 59, 59, 999);
+    return d;
+  };
+
+  const today = new Date();
+  const referenceWeekDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() - weekOffset * 7);
+  const weekStart = startOfWeek(referenceWeekDate);
+  const weekEnd = endOfWeek(weekStart);
+
+  const completedLessons = recentLessons.filter((lesson) => lesson.status === "completed");
+  const completedThisWeek = completedLessons.filter((lesson) => {
+    const created = new Date(lesson.created_at);
+    return created >= weekStart && created <= weekEnd;
+  }).length;
+  const completedLessonsThisWeek = completedLessons
+    .filter((lesson) => {
+      const created = new Date(lesson.created_at);
+      return created >= weekStart && created <= weekEnd;
+    })
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+  const completedDaySet = new Set(completedLessons.map((lesson) => toLocalDateKey(new Date(lesson.created_at))));
+  let streak = 0;
+  const streakCursor = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  while (completedDaySet.has(toLocalDateKey(streakCursor))) {
+    streak += 1;
+    streakCursor.setDate(streakCursor.getDate() - 1);
+  }
+  const weekRangeLabel = `${weekStart.toLocaleDateString(undefined, { month: "short", day: "numeric" })} - ${weekEnd.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+  const weekDayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const weekDayStats = weekDayLabels.map((label, index) => {
+    const dayStart = new Date(weekStart);
+    dayStart.setDate(weekStart.getDate() + index);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setHours(23, 59, 59, 999);
+    const count = completedLessons.filter((lesson) => {
+      const created = new Date(lesson.created_at);
+      return created >= dayStart && created <= dayEnd;
+    }).length;
+    return { label, count, dateLabel: dayStart.toLocaleDateString(undefined, { month: "short", day: "numeric" }) };
+  });
+  const weekDayLessons = weekDayLabels.map((label, index) => {
+    const dayStart = new Date(weekStart);
+    dayStart.setDate(weekStart.getDate() + index);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setHours(23, 59, 59, 999);
+    const lessons = completedLessons
+      .filter((lesson) => {
+        const created = new Date(lesson.created_at);
+        return created >= dayStart && created <= dayEnd;
+      })
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+    return {
+      label,
+      dateLabel: dayStart.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+      lessons,
+    };
+  });
+  const weekMax = Math.max(1, ...weekDayStats.map((d) => d.count));
 
   const daysInMonth = new Date(
     calendarMonth.getFullYear(),
@@ -412,33 +477,6 @@ export default function SyncDashboardPage() {
     return `/lesson/${l.course_id_canvas}/${topicSlug}?lessonId=${encodeURIComponent(l.id)}`;
   }
 
-  async function handleRetry(l: RecentLesson, e: React.MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    setRetryingLessonId(l.id);
-    setError(null);
-    try {
-      const res = await fetch("/api/generate-lesson", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lessonId: l.id }),
-      });
-      const text = await res.text();
-      let data: { error?: string };
-      try {
-        data = JSON.parse(text) as { error?: string };
-      } catch {
-        data = {};
-      }
-      if (!res.ok) throw new Error(data.error ?? "Regenerate failed");
-      window.location.href = lessonHref(l);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Retry failed");
-    } finally {
-      setRetryingLessonId(null);
-    }
-  }
-
   if (showNewLesson) {
     return (
       <main className="min-h-screen p-6 md:p-10">
@@ -469,7 +507,7 @@ export default function SyncDashboardPage() {
             >
               ← Home
             </Link>
-            <h1 className="text-2xl font-bold">Sync Dashboard</h1>
+            <h1 className="text-2xl font-bold">Home Dashboard</h1>
             <Link
               href="/settings"
               className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-[var(--muted)]"
@@ -580,61 +618,121 @@ export default function SyncDashboardPage() {
           </div>
         )}
 
-        <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
-          <h2 className="mb-2 text-lg font-semibold">What would you like to learn today?</h2>
-          <p className="mb-4 text-sm text-[var(--muted-foreground)]">
-            Start a new lesson to study a topic from your synced courses.
-          </p>
-          <button
-            onClick={() => setShowNewLesson(true)}
-            className="flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-medium text-black hover:bg-neutral-200"
-          >
-            <PlusCircle className="h-4 w-4" />
-            New Lesson
-          </button>
+        <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 md:p-8">
+            <h2 className="mb-2 text-xl font-semibold">What would you like to learn today?</h2>
+            <p className="mb-5 text-sm text-[var(--muted-foreground)]">
+              Start a new lesson to study a topic from your synced courses.
+            </p>
+            <button
+              onClick={() => setShowNewLesson(true)}
+              className="flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-medium text-black hover:bg-neutral-200"
+            >
+              <PlusCircle className="h-4 w-4" />
+              New Lesson
+            </button>
+          </div>
+
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 md:p-8">
+            <h2 className="mb-2 flex items-center gap-2 text-xl font-semibold">
+              <MessageCircle className="h-5 w-5 text-[var(--muted-foreground)]" />
+              StudyBuddy
+            </h2>
+            <p className="mb-5 text-sm text-[var(--muted-foreground)]">
+              Open your avatar tutor and chatbot to review topics and practice.
+            </p>
+            <Link
+              href="/studybuddy"
+              className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-purple-700"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Open StudyBuddy
+            </Link>
+          </div>
         </section>
 
-        {recentLessons.length > 0 && (
-          <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 md:p-6">
-            <h2 className="mb-4 text-lg font-semibold">Recent lessons</h2>
-            <ul className="space-y-2">
-              {recentLessons.map((l) => (
-                <li key={l.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)] p-3">
-                  <Link
-                    href={lessonHref(l)}
-                    className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2 rounded-lg hover:bg-[var(--muted)]/30 focus:bg-[var(--muted)]/30"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-medium">{l.topic}</p>
-                      <p className="text-sm text-[var(--muted-foreground)]">
-                        {l.course_name ?? `Course ${l.course_id_canvas}`} · {formatDate(l.created_at)}
-                      </p>
-                    </div>
-                    <span className={cn(
-                      "rounded px-2 py-0.5 text-xs capitalize",
-                      l.status === "completed" && "bg-emerald-500/20 text-emerald-400",
-                      l.status === "in_progress" && "bg-amber-500/20 text-amber-400",
-                      l.status === "pending" && "bg-[var(--muted)]"
-                    )}>
-                      {l.status.replace("_", " ")}
-                    </span>
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={(e) => handleRetry(l, e)}
-                    disabled={retryingLessonId !== null}
-                    className="shrink-0 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-[var(--muted)] disabled:opacity-50 flex items-center gap-1"
-                  >
-                    {retryingLessonId === l.id ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : null}
-                    Retry
-                  </button>
-                </li>
+        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 md:p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Weekly Stats</h2>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setWeekOffset((prev) => prev + 1)}
+                className="rounded-lg border border-[var(--border)] p-2 hover:bg-[var(--muted)]"
+                aria-label="Previous week"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <p className="min-w-[140px] text-center text-sm text-[var(--muted-foreground)]">{weekRangeLabel}</p>
+              <button
+                type="button"
+                onClick={() => setWeekOffset((prev) => Math.max(0, prev - 1))}
+                className="rounded-lg border border-[var(--border)] p-2 hover:bg-[var(--muted)] disabled:opacity-50"
+                aria-label="Next week"
+                disabled={weekOffset === 0}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/20 p-4">
+              <p className="text-sm text-[var(--muted-foreground)]">Lessons finished this week</p>
+              <p className="mt-1 text-3xl font-bold">{completedThisWeek}</p>
+            </div>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/20 p-4">
+              <p className="text-sm text-[var(--muted-foreground)]">Current streak (days)</p>
+              <p className="mt-1 text-3xl font-bold">{streak}</p>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--muted)]/10 p-4">
+            <p className="mb-3 text-sm font-medium">Completed Lessons by Day</p>
+            <div className="grid grid-cols-7 gap-2">
+              {weekDayStats.map((day) => (
+                <div key={`${day.label}-${day.dateLabel}`} className="flex flex-col items-center gap-2">
+                  <div className="flex h-24 w-full items-end justify-center rounded bg-[var(--muted)]/30 px-1">
+                    <div
+                      className="w-full rounded-t bg-purple-500/70"
+                      style={{ height: `${(day.count / weekMax) * 100}%`, minHeight: day.count > 0 ? 6 : 0 }}
+                      title={`${day.label} (${day.dateLabel}): ${day.count}`}
+                    />
+                  </div>
+                  <p className="text-[10px] text-[var(--muted-foreground)]">{day.label}</p>
+                  <p className="text-xs font-medium">{day.count}</p>
+                </div>
               ))}
-            </ul>
-          </section>
-        )}
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--muted)]/10 p-4">
+            <p className="mb-2 text-sm font-medium">Lessons Completed This Week</p>
+            <div className="grid grid-cols-7 gap-3">
+              {weekDayLessons.map((day) => (
+                <div key={`${day.label}-${day.dateLabel}`} className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-3">
+                  <p className="text-xs font-semibold text-[var(--muted-foreground)]">{day.label}</p>
+                  <p className="mb-2 text-sm font-medium">{day.dateLabel}</p>
+                  {day.lessons.length === 0 ? (
+                    <p className="text-xs text-[var(--muted-foreground)]">No lessons completed.</p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {day.lessons.map((lesson) => (
+                        <li key={lesson.id} className="text-sm">
+                          <Link href={lessonHref(lesson)} className="hover:underline">
+                            {lesson.topic}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+            {completedLessonsThisWeek.length === 0 && (
+              <p className="mt-3 text-xs text-[var(--muted-foreground)]">No completed lessons in this week.</p>
+            )}
+          </div>
+        </section>
 
         {error && (
           <div className="rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-sm text-red-400">
@@ -642,26 +740,7 @@ export default function SyncDashboardPage() {
           </div>
         )}
 
-        <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 md:p-6">
-          <div className="mb-4">
-            <h2 className="flex items-center gap-2 text-lg font-semibold">
-              <MessageCircle className="h-5 w-5 text-[var(--muted-foreground)]" />
-              StudyBuddy – Avatar & Chatbot
-            </h2>
-            <Link
-              href="/studybuddy"
-              className="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-purple-700"
-            >
-              <ExternalLink className="h-4 w-4" />
-              Open StudyBuddy
-            </Link>
-          </div>
-          <p className="text-sm text-[var(--muted-foreground)]">
-            Your tutor avatar, voice, and chatbot are saved in StudyBuddy. Open StudyBuddy and use &quot;Link to account&quot; on the content selection page to sync them to this account. Use &quot;Load from account&quot; to restore on another device.
-          </p>
-        </section>
-
-        <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 md:p-6">
+        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 md:p-6">
           <div className="mb-4 flex items-center justify-between gap-2">
             <h2 className="flex items-center gap-2 text-lg font-semibold">
               <CalendarDays className="h-5 w-5 text-[var(--muted-foreground)]" />
@@ -762,80 +841,103 @@ export default function SyncDashboardPage() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 md:p-6">
+        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 md:p-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-lg font-semibold">
               <BookOpen className="h-5 w-5 text-[var(--muted-foreground)]" />
               Courses
             </h2>
           </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Canvas ID</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Code</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {courses.length === 0 && !loading && (
-                <TableRow>
-                  <TableCell colSpan={3} className="text-center text-[var(--muted-foreground)]">
-                    No courses yet. Click Sync to load your courses from Canvas.
-                  </TableCell>
-                </TableRow>
-              )}
-              {courses.map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell className="font-mono text-[var(--muted-foreground)]">{c.id}</TableCell>
-                  <TableCell>{c.name}</TableCell>
-                  <TableCell>{c.course_code ?? "—"}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </section>
 
-        <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 md:p-6">
-          <div className="mb-4">
-            <h2 className="flex items-center gap-2 text-lg font-semibold">
-              <ClipboardList className="h-5 w-5 text-[var(--muted-foreground)]" />
-              Assignments
-            </h2>
-          </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Course ID</TableHead>
-                <TableHead>Due date</TableHead>
-                <TableHead className="max-w-[200px]">Description</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {assignments.length === 0 && !loading && (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-[var(--muted-foreground)]">
-                    No assignments yet. Click Sync to load assignments from Canvas.
-                  </TableCell>
-                </TableRow>
-              )}
-              {assignments.map((a) => (
-                <TableRow key={`${a.course_id}-${a.id}`}>
-                  <TableCell className="font-medium">{a.name}</TableCell>
-                  <TableCell className="font-mono text-[var(--muted-foreground)]">
-                    {a.course_id}
-                  </TableCell>
-                  <TableCell>{formatDate(a.due_at)}</TableCell>
-                  <TableCell className="max-w-[200px] truncate text-[var(--muted-foreground)]">
-                    {a.description
-                      ? a.description.replace(/<[^>]+>/g, "").slice(0, 80) + (a.description.length > 80 ? "…" : "")
-                      : "—"}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          {courses.length === 0 && !loading ? (
+            <p className="text-sm text-[var(--muted-foreground)]">
+              No courses yet. Click Sync to load your courses from Canvas.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {courses.map((course) => {
+                const isExpanded = expandedCourses.has(course.id);
+                const lessons = recentLessons
+                  .filter((lesson) => lesson.course_id_canvas === course.id)
+                  .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                const courseAssignments = assignments
+                  .filter((assignment) => assignment.course_id === course.id)
+                  .sort((a, b) => {
+                    const at = a.due_at ? new Date(a.due_at).getTime() : Number.MAX_SAFE_INTEGER;
+                    const bt = b.due_at ? new Date(b.due_at).getTime() : Number.MAX_SAFE_INTEGER;
+                    return at - bt;
+                  });
+
+                return (
+                  <div key={course.id} className="rounded-xl border border-[var(--border)] p-4">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h3 className="font-semibold">{course.name}</h3>
+                        <p className="text-xs text-[var(--muted-foreground)]">Canvas ID: {course.id} {course.course_code ? `· ${course.course_code}` : ""}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedCourses((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(course.id)) next.delete(course.id);
+                            else next.add(course.id);
+                            return next;
+                          })
+                        }
+                        className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs hover:bg-[var(--muted)]"
+                      >
+                        {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                        {isExpanded ? "Collapse" : "Expand"}
+                      </button>
+                    </div>
+
+                    {isExpanded && (
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                      <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/10 p-3">
+                        <p className="mb-2 text-sm font-medium">Relevant Lessons Taken</p>
+                        {lessons.length === 0 ? (
+                          <p className="text-xs text-[var(--muted-foreground)]">No lessons yet.</p>
+                        ) : (
+                          <ul className="space-y-1.5">
+                            {lessons.slice(0, 5).map((lesson) => (
+                              <li key={lesson.id} className="text-sm">
+                                <Link href={lessonHref(lesson)} className="hover:underline">
+                                  {lesson.topic}
+                                </Link>
+                                <span className="ml-2 text-xs text-[var(--muted-foreground)]">
+                                  {lesson.status.replace("_", " ")} · {formatDate(lesson.created_at)}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+
+                      <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/10 p-3">
+                        <p className="mb-2 text-sm font-medium">Assignments</p>
+                        {courseAssignments.length === 0 ? (
+                          <p className="text-xs text-[var(--muted-foreground)]">No assignments found.</p>
+                        ) : (
+                          <ul className="space-y-1.5">
+                            {courseAssignments.slice(0, 5).map((assignment) => (
+                              <li key={`${assignment.course_id}-${assignment.id}`} className="text-sm">
+                                {assignment.name}
+                                <span className="ml-2 text-xs text-[var(--muted-foreground)]">
+                                  Due: {formatDate(assignment.due_at)}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
       </div>
     </main>
