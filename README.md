@@ -12,10 +12,11 @@ Next.js 14 (App Router) + TypeScript + Tailwind CSS + Supabase. Syncs courses, c
 
 2. **Environment variables**
 
-   Copy `.env.example` to `.env.local` and set:
+   Copy `.env.example` to `.env` (or `.env.local`) and set:
 
    - **Supabase:** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (from [Supabase](https://supabase.com) project settings).
-   - **Canvas:** `CANVAS_API_URL` (e.g. `https://your-school.instructure.com`), `CANVAS_ACCESS_TOKEN` (from Canvas → Profile → Settings → New Access Token).
+   - **Canvas:** Set per user in **Settings** (Canvas API URL and Access Token); no env vars.
+   - **LiteLLM (embeddings):** `LITELLM_EMBEDDING_API_BASE=http://localhost:4000`, `LITELLM_EMBEDDING_API_KEY=sk-1234`, `LITELLM_EMBEDDING_MODEL=minimax-embed` (or `featherless-embed`). Minimax and Featherless credentials are set only in the proxy’s environment
 
 3. **Supabase schema**
 
@@ -25,21 +26,34 @@ Next.js 14 (App Router) + TypeScript + Tailwind CSS + Supabase. Syncs courses, c
 
 4. **Run the app**
 
+   All embedding requests go through the **LiteLLM proxy**. Run the proxy and the app.
+
+   Install the LiteLLM proxy once (Python):
+
    ```bash
-   bun dev
+   pip install 'litellm[proxy]'
    ```
 
-   Open [http://localhost:3000](http://localhost:3000) and go to **Sync Dashboard** to verify the Canvas connection (courses, calendar events, assignments in tables).
+   Either run both in one go: `bun run dev:all`, or in two terminals: `bun run proxy` then `bun dev`.
+
+   - Next.js: [http://localhost:3000](http://localhost:3000)
+   - LiteLLM proxy: http://localhost:4000
+
+   Set LiteLLM vars in your env: `LITELLM_EMBEDDING_API_BASE=http://localhost:4000`, `LITELLM_EMBEDDING_API_KEY=sk-1234` (match `master_key` in `litellm/config.yaml`), `LITELLM_EMBEDDING_MODEL=minimax-embed` (or `featherless-embed`). Put proxy keys in `.env` or `.env.local` (they are loaded when you run `bun run proxy`; no OpenAI connection – traffic goes only to Minimax/Featherless): for **minimax-embed** set `MINIMAX_API_KEY`, `MINIMAX_GROUP_ID`, and `OPENAI_API_KEY` (same value as `MINIMAX_API_KEY`); for **featherless-embed** set `FEATHERLESS_API_KEY` and `OPENAI_API_KEY` (same as `FEATHERLESS_API_KEY`). See `litellm/config.yaml` for details.
+
+   **Test embeddings:** With app and proxy running, open http://localhost:3000/api/embedding-test. You should get `{ "ok": true, "dimensions": 1536, ... }` when configured correctly.
+
+5. Open [http://localhost:3000](http://localhost:3000) and go to **Sync Dashboard** to verify the Canvas connection (courses, calendar events, assignments in tables).
 
 ## Create an example user
 
 This uses the Supabase **Service Role Key** (never expose this in the browser).
 
-1. Add `SUPABASE_SERVICE_ROLE_KEY` to `.env.local` (see `.env.example`), or set it in your shell.
+1. Add `SUPABASE_SERVICE_ROLE_KEY` to your env (see `.env.example`), or set it in your shell.
 2. From the project root, run:
 
    ```bash
-   npm run create-example-user
+   bun run create-example-user
    ```
 
 Defaults:
@@ -63,10 +77,13 @@ Override with:
 
 ## Scripts
 
-- `bun dev` – Start dev server
-- `bun build` – Production build
-- `bun start` – Start production server
-- `bun lint` – Run ESLint
+- `bun dev` – Next.js dev server
+- `bun run dev:all` – Next.js and LiteLLM proxy together
+- `bun run proxy` – LiteLLM proxy only (port 4000)
+- `bun run build` – Production build
+- `bun run start` – Start production server
+- `bun run lint` – Run ESLint
+- `bun run create-example-user` – Create a test user (requires `SUPABASE_SERVICE_ROLE_KEY` in env)
 
 ## How to run with Bun
 
@@ -78,6 +95,6 @@ bun install
 bun dev
 
 # Build / Run
-bun build
-bun start
+bun run build
+bun run start
 ```

@@ -4,7 +4,7 @@ import { existsSync } from "fs";
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 
-// Load .env from project root. Prefer cwd (when run via "npm run" from repo root), else script-relative.
+// Load .env from project root. Prefer cwd (when run via "bun run" from repo root), else script-relative.
 const cwdRoot = process.cwd();
 const scriptDir =
   typeof __dirname !== "undefined"
@@ -31,7 +31,7 @@ const FULL_NAME = process.env.EXAMPLE_USER_FULL_NAME ?? "Test User";
 async function main() {
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
     throw new Error(
-      "Missing env: set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY before running this script, or define them in .env.local."
+      "Missing env: set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY before running this script (e.g. in .env or .env.local)."
     );
   }
 

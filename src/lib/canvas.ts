@@ -1,6 +1,6 @@
 /**
  * Canvas LMS API client and sync utilities.
- * Uses optional baseUrl/token when provided; otherwise env CANVAS_API_URL and CANVAS_ACCESS_TOKEN.
+ * Canvas API URL and token are per-user; pass credentials from profile/settings (no env fallback).
  */
 
 export type CanvasConfig = {
@@ -9,20 +9,10 @@ export type CanvasConfig = {
 };
 
 function getCanvasConfig(overrides?: Partial<CanvasConfig>): { apiBase: string; token: string } {
-  const baseUrl =
-    overrides?.baseUrl ??
-    process.env.CANVAS_API_URL ??
-    process.env.NEXT_PUBLIC_CANVAS_API_URL ??
-    "";
-  const token =
-    overrides?.token ??
-    process.env.CANVAS_ACCESS_TOKEN ??
-    process.env.NEXT_PUBLIC_CANVAS_ACCESS_TOKEN ??
-    "";
+  const baseUrl = overrides?.baseUrl ?? "";
+  const token = overrides?.token ?? "";
   if (!baseUrl || !token) {
-    throw new Error(
-      "Canvas API: set Canvas API URL and Access Token in Settings, or set CANVAS_API_URL and CANVAS_ACCESS_TOKEN in .env."
-    );
+    throw new Error("Canvas API: set Canvas API URL and Access Token in Settings.");
   }
   const apiBase = baseUrl.replace(/\/$/, "") + "/api/v1";
   return { apiBase, token };
