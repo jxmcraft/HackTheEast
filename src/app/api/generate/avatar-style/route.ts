@@ -1,7 +1,7 @@
 /**
  * Avatar Style Transfer API
- * Uses Stability AI (Stable Diffusion) when STABILITY_API_KEY is set, else MiniMax.
- * Both support image-to-image style transfer with a text prompt.
+ * Uses Stability AI (Stable Diffusion) when STABILITY_API_KEY is set.
+ * Otherwise uses MiniMax Image-01 (best for portrait/style transfer) with MINIMAX_API_KEY.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -10,6 +10,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const STABILITY_ENGINE = "stable-diffusion-xl-1024-v1-0";
+
+// MiniMax Image-01: best for portrait & image-to-image; supports subject_reference (character).
+const MINIMAX_IMAGE_MODEL = "image-01";
 
 // Preserve the subject's face, gender, and identity in every style
 const PRESERVE_SUBJECT =
@@ -116,16 +119,20 @@ async function styleWithStability(
 async function styleWithMiniMax(
   prompt: string,
   imageFile: string,
-  apiKey: string
+  apiKey: string,
+  groupId?: string
 ): Promise<{ imageUrl: string } | { error: string }> {
-  const response = await fetch("https://api.minimax.io/v1/image_generation", {
+  const url = new URL("https://api.minimax.io/v1/image_generation");
+  if (groupId) url.searchParams.set("GroupId", groupId);
+
+  const response = await fetch(url.toString(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "image-01",
+      model: MINIMAX_IMAGE_MODEL,
       prompt,
       subject_reference: [{ type: "character", image_file: imageFile }],
       aspect_ratio: "1:1",
@@ -183,7 +190,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 502 });
     }
 
-    // Fallback: MiniMax
+    // Use MiniMax Image-01 (best for avatar/portrait style transfer)
     const apiKey = process.env.MINIMAX_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
@@ -191,9 +198,10 @@ export async function POST(request: NextRequest) {
         { status: 503 }
       );
     }
+    const groupId = process.env.MINIMAX_GROUP_ID ?? undefined;
 
     const imageFile = image.startsWith("data:") ? image : `data:image/jpeg;base64,${image.split(",")[1] || image}`;
-    const result = await styleWithMiniMax(prompt, imageFile, apiKey);
+    const result = await styleWithMiniMax(prompt, imageFile, apiKey, groupId);
     if ("imageUrl" in result) return NextResponse.json(result);
     return NextResponse.json({ error: result.error }, { status: 502 });
   } catch (error) {
