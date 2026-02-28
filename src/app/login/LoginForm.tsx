@@ -15,6 +15,9 @@ export function LoginForm({ next }: { next: string }) {
     formData.set("next", next);
     try {
       const result: LoginResult = await login(formData);
+      // #region agent log
+      fetch("http://127.0.0.1:7242/ingest/b4376a79-f653-4c48-8ff8-e5fbe86d419a", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ location: "login/LoginForm.tsx:handleSubmit", message: "login result", data: { hasError: !!result?.error, errorText: result?.error ?? null, hasNext: !!result?.next, next: result?.next ?? null }, timestamp: Date.now(), hypothesisId: "H4" }) }).catch(() => {});
+      // #endregion
       if (result.error) {
         setMessage(result.error);
         return;
