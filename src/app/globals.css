@@ -11,6 +11,16 @@
   --muted-foreground: #a3a3a3;
   --border: #262626;
   --ring: #525252;
+  --color-primary: #9333ea;
+  --color-primary-hover: #7c3aed;
+  --color-primary-foreground: #ffffff;
+  --color-accent: #a855f7;
+  --color-accent-foreground: #ffffff;
+  --color-surface: #171717;
+  --color-surface-elevated: #262626;
+  --color-success: #22c55e;
+  --color-warning: #eab308;
+  --color-error: #ef4444;
 }
 
 body {
@@ -54,5 +64,16 @@ body {
   }
   50% {
     transform: translateX(-50%) scaleY(1.4);
+  }
+}
+
+@keyframes fadeSlide {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

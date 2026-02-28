@@ -5,7 +5,7 @@
 # Run: bun run proxy (in one terminal); bun dev (in another).
 # Default port: 4000. Set LITELLM_EMBEDDING_API_BASE=http://localhost:4000 in env.
 #
-# Proxy env (no OpenAI connection – keys are loaded when you run "bun run proxy"):
+# Proxy env (no OpenAI connection - keys are loaded when you run "bun run proxy"):
 #   For minimax-embed: MINIMAX_API_KEY, MINIMAX_GROUP_ID, OPENAI_API_KEY=$MINIMAX_API_KEY
 #   For featherless-embed: FEATHERLESS_API_KEY, OPENAI_API_KEY=$FEATHERLESS_API_KEY
 

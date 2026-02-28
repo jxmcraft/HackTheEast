@@ -18,12 +18,21 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+export type UploadedDocForChat = {
+  id: string;
+  name: string;
+  file_type: string;
+  extracted_text?: string;
+  key_points: { pageNumber: number; points: string[] }[];
+};
+
 interface LiveChatProps {
   topic: string;
   section: string;
   sectionContent?: string;
   personalityPrompt: string;
   voiceId?: string;
+  uploadedMaterials?: UploadedDocForChat[];
   onSendMessage?: (message: string) => Promise<string>;
 }
 
@@ -39,6 +48,7 @@ export default function LiveChat({
   sectionContent = "",
   personalityPrompt,
   voiceId,
+  uploadedMaterials = [],
   onSendMessage,
 }: LiveChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -119,6 +129,11 @@ export default function LiveChat({
             section,
             personalityPrompt,
             sectionContent,
+            uploadsContext: uploadedMaterials.map((u) => ({
+              name: u.name,
+              extracted_text: u.extracted_text,
+              key_points: u.key_points,
+            })),
           }),
         });
         const data = await res.json().catch(() => ({}));

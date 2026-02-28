@@ -25,9 +25,20 @@ if (!existsSync(configPath)) {
   process.exit(1);
 }
 
-// Ensure LiteLLM is installed (e.g. if postinstall was skipped)
-const check = spawnSync("litellm", ["--version"], { encoding: "utf8" });
-if (check.status !== 0) {
+// Run litellm via Python (litellm CLI exe is often not on PATH or blocked on Windows)
+const pyCandidates = ["python", "py", "python3"];
+let pyCmd: string | null = null;
+for (const py of pyCandidates) {
+  const check = spawnSync(py, ["-c", "from litellm import run_server; print('ok')"], {
+    encoding: "utf8",
+    cwd: root,
+  });
+  if (check.status === 0) {
+    pyCmd = py;
+    break;
+  }
+}
+if (!pyCmd) {
   console.log("LiteLLM not found. Running setup...");
   const setup = spawnSync("bun", ["run", "setup-litellm"], {
     encoding: "utf8",
@@ -38,10 +49,28 @@ if (check.status !== 0) {
     console.error("Run: bun run setup-litellm");
     process.exit(1);
   }
+  for (const py of pyCandidates) {
+    const check = spawnSync(py, ["-c", "from litellm import run_server; print('ok')"], {
+      encoding: "utf8",
+      cwd: root,
+    });
+    if (check.status === 0) {
+      pyCmd = py;
+      break;
+    }
+  }
+  if (!pyCmd) {
+    console.error("LiteLLM still not found after setup. Ensure Python and pip are in PATH.");
+    process.exit(1);
+  }
 }
 
-const child = spawn("litellm", ["--config", configPath], {
-  env: process.env,
+// Use UTF-8 for config file reading (avoids cp950 decode errors on Windows)
+const env = { ...process.env, PYTHONIOENCODING: "utf-8" };
+const litellmArgs = `import sys; sys.argv=['litellm','--config','${configPath.replace(/\\/g, "/")}']; from litellm import run_server; run_server()`;
+
+const child = spawn(pyCmd, ["-c", litellmArgs], {
+  env,
   stdio: "inherit",
   cwd: root,
 });

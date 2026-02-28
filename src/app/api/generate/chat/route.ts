@@ -17,12 +17,14 @@ export async function POST(request: NextRequest) {
       section = "",
       personalityPrompt = "be clear and helpful",
       sectionContent = "",
+      uploadsContext = [],
     } = body as {
       message?: string;
       topic?: string;
       section?: string;
       personalityPrompt?: string;
       sectionContent?: string;
+      uploadsContext?: Array<{ name: string; extracted_text?: string; key_points?: { pageNumber: number; points: string[] }[] }>;
     };
 
     if (!message || typeof message !== "string" || !message.trim()) {
@@ -42,12 +44,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    let uploadsBlock = "";
+    if (Array.isArray(uploadsContext) && uploadsContext.length > 0) {
+      const parts = uploadsContext.slice(0, 5).map((u) => {
+        const text = (u.extracted_text || "").slice(0, 4000);
+        const kp = (u.key_points || [])
+          .map((p) => `Page ${p.pageNumber}: ${(p.points || []).join("; ")}`)
+          .join("\n");
+        return `Document "${u.name}":\n${text ? `Content:\n${text}\n` : ""}${kp ? `Key points:\n${kp}` : ""}`;
+      });
+      uploadsBlock = `\nThe student has uploaded these materials. Use them to inform your answer and refer to key points when relevant:\n\n${parts.join("\n\n---\n\n")}\n`;
+    }
+
     const systemPrompt = `You are a friendly, knowledgeable AI tutor. Current topic: ${topic}. Current section: ${section}.
 Teaching style you must follow: ${personalityPrompt}.
 
-${sectionContent ? `Relevant content (use to inform your answer):\n${sectionContent.slice(0, 3000)}\n` : ""}
+${sectionContent ? `Relevant content (use to inform your answer):\n${sectionContent.slice(0, 3000)}\n` : ""}${uploadsBlock}
 
-Answer the student's question clearly and concisely. Use the teaching style above. If the question is off-topic, briefly answer then gently steer back to ${topic}. Keep replies helpful and under 200 words unless the question needs more.`;
+Answer the student's question clearly and concisely. Use the teaching style above. When the student has uploaded materials, incorporate and highlight key points from those documents when they relate to the question. If the question is off-topic, briefly answer then gently steer back to ${topic}. Keep replies helpful and under 200 words unless the question needs more.`;
 
     const response = await fetch("https://api.minimax.io/v1/text/chatcompletion_v2", {
       method: "POST",

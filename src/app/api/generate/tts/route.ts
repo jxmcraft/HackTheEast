@@ -38,7 +38,8 @@ export async function POST(request: NextRequest) {
     const speedClamped = Math.min(2, Math.max(0.5, Number(speed) || 1));
     const voice = voiceId && voiceId.trim() ? voiceId.trim() : DEFAULT_VOICE;
 
-    const response = await fetch("https://api.minimax.io/v1/t2a_v2", {
+    // Use api-uw for reduced Time-to-First-Audio (TTFA)
+    const response = await fetch("https://api-uw.minimax.io/v1/t2a_v2", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({

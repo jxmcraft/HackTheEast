@@ -23,6 +23,9 @@ type GenerateBody = {
 export async function POST(request: NextRequest) {
   try {
     const supabase = createClient();
+    if (!supabase) {
+      return NextResponse.json({ error: "Service unavailable" }, { status: 503 });
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
