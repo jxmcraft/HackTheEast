@@ -8,6 +8,8 @@
  * `node_modules/@huggingface/transformers/.cache`) and restart.
  */
 
+import path from "node:path";
+
 export const LOCAL_EMBED_DIM = 384;
 const MODEL_ID = "onnx-community/all-MiniLM-L6-v2-ONNX";
 const MAX_TEXT_LENGTH = 8_192;
@@ -16,7 +18,6 @@ const MAX_TEXT_LENGTH = 8_192;
 function setCacheDir(env: { cacheDir?: string }): void {
   if (typeof process !== "undefined" && process.cwd && env) {
     try {
-      const path = require("node:path") as typeof import("node:path");
       env.cacheDir = path.join(process.cwd(), ".cache");
     } catch {
       /* ignore */
@@ -26,8 +27,8 @@ function setCacheDir(env: { cacheDir?: string }): void {
 
 /** Matches ONNX external-data read errors (incomplete/corrupt cache). */
 function isOnnxCacheError(e: unknown): boolean {
-  const msg = e instanceof Error ? e.message : String(e);
-  return /GetExtDataFromTensorProto|out of bounds|are out of bounds/i.test(msg);
+  const message = e instanceof Error ? e.message : String(e);
+  return /GetExtDataFromTensorProto|out of bounds|are out of bounds/i.test(message);
 }
 
 let pipelinePromise: Promise<(input: string | string[], options?: { pooling?: string; normalize?: boolean }) => Promise<{ data: Float32Array; dims: number[] }>> | null = null;
@@ -43,7 +44,6 @@ function getPipeline() {
         });
         return pipe as (input: string | string[], options?: { pooling?: string; normalize?: boolean }) => Promise<{ data: Float32Array; dims: number[] }>;
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
         const isCache = isOnnxCacheError(e);
         if (isCache) {
           pipelinePromise = null;

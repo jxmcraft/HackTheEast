@@ -4,14 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:all": "concurrently -n next,proxy -c blue,green \"bun dev\" \"bun run proxy\"",
-    "proxy": "bun scripts/run-proxy.ts",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "create-example-user": "bun scripts/create-example-user.ts",
-    "setup-litellm": "bun scripts/setup-litellm.ts",
-    "postinstall": "bun run setup-litellm"
+    "create-example-user": "bun scripts/create-example-user.ts"
   },
   "keywords": [],
   "author": "",
@@ -52,7 +48,6 @@
     "typescript": "^5.9.3"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.35"
   }

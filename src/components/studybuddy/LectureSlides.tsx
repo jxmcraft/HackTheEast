@@ -9,7 +9,7 @@ interface LectureSlidesProps {
   sectionTitle: string;
 }
 
-export default function LectureSlides({ slides, currentIndex, sectionTitle }: LectureSlidesProps) {
+export default function LectureSlides({ slides, currentIndex }: LectureSlidesProps) {
   const [mermaidSvgs, setMermaidSvgs] = useState<Record<number, string>>({});
 
   useEffect(() => {

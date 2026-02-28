@@ -108,7 +108,6 @@ export default function VideoTeacher({
   const [narrationScript, setNarrationScript] = useState<string | null>(null);
   const [slides, setSlides] = useState<StudyBuddySlide[]>(() => buildFallbackSlides(sectionTitle, sectionContent));
   const [scriptLoading, setScriptLoading] = useState(true);
-  const [slidesLoading, setSlidesLoading] = useState(false);
 
   const lectureContainerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -175,7 +174,7 @@ export default function VideoTeacher({
       setScriptLoading(false);
     }
 
-    const scriptPromise = cachedScript
+    void (cachedScript
       ? Promise.resolve(null)
       : fetch("/api/studybuddy/expand-script", {
           method: "POST",
@@ -206,9 +205,9 @@ export default function VideoTeacher({
           .catch(() => null)
           .finally(() => {
             if (!cancelled) setScriptLoading(false);
-          });
+          }));
 
-    const slidesPromise = fetch("/api/studybuddy/generate-slides", {
+    void fetch("/api/studybuddy/generate-slides", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sectionTitle, sectionContent, topic }),

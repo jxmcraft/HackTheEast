@@ -1,6 +1,6 @@
 /**
  * Semantic search retrieval for course materials.
- * Uses embeddings (LiteLLM) and Supabase match_course_materials.
+ * Uses embeddings (local / OpenAI / MiniMax) and Supabase match_course_materials.
  */
 
 import { createClientOrThrow } from "@/utils/supabase/server";

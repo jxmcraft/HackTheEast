@@ -1,7 +1,7 @@
 /**
  * Embeddings: local in-process model by default (Transformers.js / Xenova all-MiniLM-L6-v2).
- * No API keys or separate server — model loads on first use when you run the app.
- * Set EMBEDDING_PROVIDER=openai (and OPENAI_EMBEDDING_API_KEY) to use OpenAI instead.
+ * Set EMBEDDING_PROVIDER=openai (and OPENAI_EMBEDDING_API_KEY) for OpenAI, or EMBEDDING_PROVIDER=minimax
+ * with MINIMAX_API_KEY and MINIMAX_GROUP_ID for MiniMax.
  */
 
 import { embedLocal, embedLocalBatch, LOCAL_EMBED_DIM } from "./embeddings-local";
@@ -12,22 +12,10 @@ const RATE_LIMIT_BACKOFF_MS = 2000;
 /** Max texts per batch for embedding APIs. */
 const EMBED_BATCH_SIZE = 32;
 
-/** Use local in-process embeddings (default). No separate commands — model loads when server runs. */
+/** Use local in-process embeddings (default). */
 function isLocalEmbedding(): boolean {
   const p = process.env.EMBEDDING_PROVIDER?.toLowerCase();
   return p !== "openai" && p !== "minimax"; // default to local when unset or "local"
-}
-
-function getLiteLLMConfig(): { baseURL: string; apiKey: string; model: string } {
-  const base = process.env.LITELLM_EMBEDDING_API_BASE ?? "";
-  const key = process.env.LITELLM_EMBEDDING_API_KEY ?? "";
-  const model = process.env.LITELLM_EMBEDDING_MODEL ?? "minimax-embed";
-  if (!base || !key) {
-    throw new Error(
-      "For proxy-based embeddings set LITELLM_EMBEDDING_API_BASE and LITELLM_EMBEDDING_API_KEY. Or use local embeddings (default)."
-    );
-  }
-  return { baseURL: base.replace(/\/$/, ""), apiKey: key, model };
 }
 
 /** Truncate string for debug logs; never log full API keys. */
@@ -143,7 +131,7 @@ async function generateEmbeddingMinimaxDirectBatch(
   // Only treat as rate limit when we have no valid vectors and API says 1002
   if (statusCode === 1002 && !hasValidVectors) {
     throw new Error(
-      "Minimax embedding: rate limit exceeded (1002). Falling back to OpenAI or proxy."
+      "Minimax embedding: rate limit exceeded (1002). Set OPENAI_EMBEDDING_API_KEY for fallback or retry later."
     );
   }
   if (statusCode != null && statusCode !== 0 && !hasValidVectors) {
@@ -250,8 +238,7 @@ export async function generateEmbedding(text: string, type: "db" | "query" = "db
     if (vecs.length > 0) return vecs[0];
     throw new Error("OpenAI embedding returned no vector");
   }
-  const model = process.env.LITELLM_EMBEDDING_MODEL ?? "minimax-embed";
-  const minimax = model === "minimax-embed" ? getMinimaxDirectConfig() : null;
+  const minimax = getMinimaxDirectConfig();
   if (minimax) {
     try {
       const vec = await generateEmbeddingMinimaxDirect(text, minimax, type);
@@ -269,209 +256,8 @@ export async function generateEmbedding(text: string, type: "db" | "query" = "db
       throw _directErr;
     }
   }
-  const { baseURL, apiKey, model: proxyModel } = getLiteLLMConfig();
-  const url = `${baseURL}/v1/embeddings`;
-  let res: { data?: Array<{ embedding?: unknown }>; [k: string]: unknown } | undefined;
-  for (let attempt = 0; attempt <= RATE_LIMIT_RETRIES; attempt++) {
-    if (attempt > 0) {
-      await sleep(RATE_LIMIT_BACKOFF_MS * Math.pow(2, attempt - 1));
-    }
-    debugLog("LiteLLM", "request", {
-      url,
-      method: "POST",
-      model: proxyModel,
-      attempt: attempt + 1,
-      headers: { Authorization: maskKey(apiKey) },
-    });
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: proxyModel,
-          input: text.slice(0, 8_000),
-        }),
-      });
-      const bodyText = await response.text();
-      debugLog("LiteLLM", "response", {
-        status: response.status,
-        ok: response.ok,
-        bodyPreview: truncate(bodyText),
-      });
-      if (response.status === 429 && attempt < RATE_LIMIT_RETRIES) continue;
-      if (!response.ok) {
-        const is404 = response.status === 404;
-        const bodySaysEmbeddingRoute = bodyText.includes("embeddings") && bodyText.includes("not found");
-        const openaiKey = process.env.OPENAI_EMBEDDING_API_KEY;
-        if (is404 && bodySaysEmbeddingRoute && openaiKey) {
-          const openaiUrl = (process.env.OPENAI_API_BASE ?? "https://api.openai.com").replace(/\/$/, "") + "/v1/embeddings";
-          debugLog("OpenAI", "request", { url: openaiUrl, method: "POST", note: "fallback from LiteLLM 404" });
-          const openaiRes = await fetch(openaiUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${openaiKey}`,
-            },
-            body: JSON.stringify({
-              model: OPENAI_EMBED_MODEL,
-              input: text.slice(0, 8_000),
-            }),
-          });
-          const openaiText = await openaiRes.text();
-          debugLog("OpenAI", "response", { status: openaiRes.status, ok: openaiRes.ok, bodyPreview: truncate(openaiText) });
-          if (openaiRes.ok) {
-            const openaiJson = JSON.parse(openaiText) as { data?: Array<{ embedding?: unknown }> };
-            const vec = openaiJson.data?.[0]?.embedding;
-            if (Array.isArray(vec) && vec.length > 0 && typeof vec[0] === "number") {
-              return vec as number[];
-            }
-          }
-        }
-        if (is404 && bodySaysEmbeddingRoute) {
-          throw new Error(
-            "Proxy returned 404 for embeddings. Use MiniMax for embeddings: set MINIMAX_API_KEY and MINIMAX_GROUP_ID (no proxy needed). Or set OPENAI_EMBEDDING_API_KEY for fallback. Featherless does not support embeddings."
-          );
-        }
-        throw new Error(`${response.status} ${response.statusText}${bodyText ? `: ${bodyText.slice(0, 300)}` : ""}`);
-      }
-      res = JSON.parse(bodyText) as NonNullable<typeof res>;
-      break;
-    } catch (err) {
-      if (attempt === RATE_LIMIT_RETRIES) {
-        const msg = err instanceof Error ? err.message : String(err);
-        throw new Error(`LiteLLM embeddings request failed: ${msg}`);
-      }
-      const msg = err instanceof Error ? err.message : String(err);
-      if (!msg.includes("429") && !msg.includes("Rate limit")) throw new Error(`LiteLLM embeddings request failed: ${msg}`);
-    }
-  }
-  if (res == null) {
-    throw new Error("LiteLLM embeddings: failed after rate limit retries");
-  }
-
-  // Some proxies return data as a JSON string; normalize to array/object
-  if (typeof res.data === "string") {
-    try {
-      (res as { data?: unknown }).data = JSON.parse(res.data as string);
-    } catch {
-      // leave as-is
-    }
-  }
-
-  // OpenAI shape: { data: [ { embedding: number[] } ] }
-  const vec = res.data?.[0]?.embedding;
-  if (Array.isArray(vec) && vec.length > 0 && typeof vec[0] === "number") {
-    return vec as number[];
-  }
-
-  // data[0] might be the vector itself (e.g. data: [[0.1, 0.2, ...]])
-  const first = res.data?.[0];
-  if (Array.isArray(first) && first.length > 0) {
-    const firstEl = first[0];
-    if (typeof firstEl === "number") return first as number[];
-    if (typeof firstEl === "string" && !Number.isNaN(Number(firstEl))) {
-      return first.map((x) => (typeof x === "number" ? x : Number(x))) as number[];
-    }
-  }
-
-  // data[0] might use a different key (e.g. vectors, embedding in nested form)
-  if (first && typeof first === "object" && !Array.isArray(first)) {
-    const obj = first as Record<string, unknown>;
-    for (const key of ["embedding", "embeddings", "vector", "vectors"]) {
-      const v = obj[key];
-      if (Array.isArray(v) && v.length > 0) {
-        const arr = v.length === 1 ? (v[0] as unknown) : v;
-        if (Array.isArray(arr) && typeof arr[0] === "number") return arr as number[];
-        if (typeof arr === "number" || (Array.isArray(arr) && arr.every((x) => typeof x === "number")))
-          return Array.isArray(arr) ? (arr as number[]) : [arr as number];
-      }
-    }
-  }
-
-  // Minimax/LiteLLM: data[0] may have nested structure; try data array as raw vectors
-  if (res.data && Array.isArray(res.data) && res.data.length > 0) {
-    const entry = res.data[0];
-    if (Array.isArray(entry) && entry.length > 0 && typeof entry[0] === "number") return entry as number[];
-    if (entry && typeof entry === "object" && !Array.isArray(entry)) {
-      const o = entry as Record<string, unknown>;
-      const raw = o.embedding ?? o.vectors ?? o.vector;
-      if (Array.isArray(raw)) {
-        const flat = raw.length === 1 ? (raw[0] as unknown) : raw;
-        if (Array.isArray(flat) && flat.length > 0 && typeof flat[0] === "number") return flat as number[];
-      }
-    }
-  }
-
-  // Alternative: single object with embedding array
-  const alt = (res as { embedding?: unknown }).embedding;
-  if (Array.isArray(alt) && alt.length > 0 && typeof alt[0] === "number") {
-    return alt as number[];
-  }
-
-  // Top-level embedding/vectors (some APIs put vector at root)
-  const root = res as Record<string, unknown>;
-  for (const key of ["embedding", "embeddings", "vector", "vectors", "output"]) {
-    const v = root[key];
-    if (Array.isArray(v) && v.length > 0) {
-      const item = v[0];
-      if (Array.isArray(item) && item.length > 0 && (typeof item[0] === "number" || (typeof item[0] === "string" && !Number.isNaN(Number(item[0]))))) {
-        return item.map((x) => (typeof x === "number" ? x : Number(x))) as number[];
-      }
-      if (typeof item === "number" || (typeof item === "string" && !Number.isNaN(Number(item)))) {
-        return v.map((x) => (typeof x === "number" ? x : Number(x))) as number[];
-      }
-    }
-  }
-
-  // When data is null, try usage or other top-level objects (LiteLLM/Minimax may nest embedding here)
-  if (res.data == null) {
-    const usage = res.usage as Record<string, unknown> | undefined;
-    if (usage && typeof usage === "object" && !Array.isArray(usage)) {
-      for (const key of ["embedding", "embeddings", "vector", "vectors", "data"]) {
-        const v = usage[key];
-        if (Array.isArray(v) && v.length > 0) {
-          const item = v[0];
-          if (Array.isArray(item) && item.length > 0 && (typeof item[0] === "number" || (typeof item[0] === "string" && !Number.isNaN(Number(item[0]))))) {
-            return item.map((x) => (typeof x === "number" ? x : Number(x))) as number[];
-          }
-          if (typeof item === "number" || (typeof item === "string" && !Number.isNaN(Number(item)))) {
-            return v.map((x) => (typeof x === "number" ? x : Number(x))) as number[];
-          }
-        }
-      }
-    }
-  }
-
-  // Minimax/LiteLLM: data may be an object (not array) with embedding/vectors inside
-  const dataObj = res.data as Record<string, unknown> | undefined;
-  if (dataObj && typeof dataObj === "object" && !Array.isArray(dataObj)) {
-    for (const key of ["embedding", "embeddings", "vector", "vectors", "data"]) {
-      const v = dataObj[key];
-      if (!Array.isArray(v) || v.length === 0) continue;
-      const item = v[0];
-      if (Array.isArray(item) && item.length > 0) {
-        const num = typeof item[0] === "number" ? item[0] : Number(item[0]);
-        if (!Number.isNaN(num)) return item.map((x) => (typeof x === "number" ? x : Number(x))) as number[];
-      }
-      if (typeof item === "number" || (typeof item === "string" && !Number.isNaN(Number(item)))) {
-        return v.map((x) => (typeof x === "number" ? x : Number(x))) as number[];
-      }
-    }
-  }
-
-  // Help debug: include data[0] keys if present
-  const data0Keys =
-    res?.data && Array.isArray(res.data) && res.data[0] && typeof res.data[0] === "object"
-      ? Object.keys(res.data[0] as object).join(", ")
-      : res?.data
-        ? `data.length=${(res.data as unknown[]).length}`
-        : null;
-  const shape = data0Keys ?? (res && typeof res === "object" ? Object.keys(res).join(", ") : String(res));
   throw new Error(
-    `LiteLLM embeddings: empty or invalid response (model=${proxyModel}, response: ${shape}). Check proxy and model compatibility; ensure LITELLM_EMBEDDING_MODEL matches a model in litellm/config.yaml with mode: embedding.`
+    "Embeddings: set EMBEDDING_PROVIDER=openai and OPENAI_EMBEDDING_API_KEY, or EMBEDDING_PROVIDER=minimax with MINIMAX_API_KEY and MINIMAX_GROUP_ID, or use local (default)."
   );
 }
 
@@ -486,8 +272,7 @@ export async function generateEmbeddingBatch(texts: string[], type: "db" | "quer
     .filter((t): t is string => t !== null);
   if (valid.length === 0) return [];
 
-  const model = process.env.LITELLM_EMBEDDING_MODEL ?? "minimax-embed";
-  const minimax = model === "minimax-embed" ? getMinimaxDirectConfig() : null;
+  const minimax = getMinimaxDirectConfig();
   const openaiKey = process.env.OPENAI_EMBEDDING_API_KEY;
 
   const runChunk = async (chunk: string[]): Promise<number[][]> => {
@@ -495,7 +280,6 @@ export async function generateEmbeddingBatch(texts: string[], type: "db" | "quer
     if (isLocalEmbedding()) {
       return embedLocalBatch(chunk);
     }
-    // Prefer OpenAI when EMBEDDING_PROVIDER=openai (avoids MiniMax rate limits).
     if (preferOpenAIEmbedding()) {
       return await generateEmbeddingOpenAIDirectBatch(chunk);
     }
@@ -528,69 +312,9 @@ export async function generateEmbeddingBatch(texts: string[], type: "db" | "quer
         `Minimax embedding failed and OPENAI_EMBEDDING_API_KEY is not set for fallback. Cause: ${underlying}`
       );
     }
-    const { baseURL, apiKey, model: proxyModel } = getLiteLLMConfig();
-    if (proxyModel === "featherless-embed" && openaiKey) {
-      return await generateEmbeddingOpenAIDirectBatch(chunk);
-    }
-    if (proxyModel === "featherless-embed") {
-      throw new Error(
-        "featherless-embed does not support /v1/embeddings. Set LITELLM_EMBEDDING_MODEL=minimax-embed or OPENAI_EMBEDDING_API_KEY for embeddings."
-      );
-    }
-    const url = `${baseURL}/v1/embeddings`;
-    for (let attempt = 0; attempt <= RATE_LIMIT_RETRIES; attempt++) {
-      if (attempt > 0) {
-        await sleep(RATE_LIMIT_BACKOFF_MS * Math.pow(2, attempt - 1));
-      }
-      debugLog("LiteLLM", "request", {
-        url,
-        method: "POST",
-        model: proxyModel,
-        attempt: attempt + 1,
-        chunkSize: chunk.length,
-        headers: { Authorization: maskKey(apiKey) },
-      });
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: proxyModel,
-          input: chunk.map((t) => t.slice(0, 8_000)),
-        }),
-      });
-      const bodyText = await res.text();
-      debugLog("LiteLLM", "response", {
-        status: res.status,
-        ok: res.ok,
-        bodyPreview: truncate(bodyText),
-      });
-      if (res.status === 404 && bodyText.includes("embeddings") && bodyText.includes("not found") && openaiKey) {
-        return await generateEmbeddingOpenAIDirectBatch(chunk);
-      }
-      if (res.status === 429 && attempt < RATE_LIMIT_RETRIES) continue;
-      if (!res.ok) {
-        throw new Error(`${res.status} ${res.statusText}${bodyText ? `: ${bodyText.slice(0, 300)}` : ""}`);
-      }
-      const data = JSON.parse(bodyText) as { data?: Array<{ embedding?: unknown }> };
-      const list = data?.data;
-      if (!Array.isArray(list) || list.length !== chunk.length) {
-        throw new Error(`Proxy returned ${list?.length ?? 0} vectors, expected ${chunk.length}`);
-      }
-      const out: number[][] = [];
-      for (const item of list) {
-        const vec = item?.embedding;
-        if (Array.isArray(vec) && vec.length > 0 && typeof vec[0] === "number") {
-          out.push(vec as number[]);
-        } else {
-          throw new Error("Proxy embedding: invalid vector shape");
-        }
-      }
-      return out;
-    }
-    throw new Error("LiteLLM embeddings: failed after rate limit retries");
+    throw new Error(
+      "Embeddings: set EMBEDDING_PROVIDER=openai and OPENAI_EMBEDDING_API_KEY, or EMBEDDING_PROVIDER=minimax with MINIMAX_API_KEY and MINIMAX_GROUP_ID, or use local (default)."
+    );
   };
 
   const results: number[][] = [];
@@ -609,12 +333,10 @@ export function getEmbeddingModelConfig(): { model: string; dimensions: number }
   if (preferOpenAIEmbedding()) {
     return { model: OPENAI_EMBED_MODEL, dimensions: DEFAULT_DIM };
   }
-  const model = process.env.LITELLM_EMBEDDING_MODEL ?? "minimax-embed";
-  if (model === "minimax-embed" && getMinimaxDirectConfig()) {
+  if (getMinimaxDirectConfig()) {
     return { model: "minimax-embed", dimensions: DEFAULT_DIM };
   }
-  const { model: proxyModel } = getLiteLLMConfig();
-  return { model: proxyModel, dimensions: DEFAULT_DIM };
+  return { model: "minimax-embed", dimensions: DEFAULT_DIM };
 }
 
 export const EMBEDDING_DIM = DEFAULT_DIM;
