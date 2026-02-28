@@ -295,7 +295,11 @@ export default function StudyBuddyPage() {
                 <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">
                   {(() => {
                     const struggleId = getFirstStruggle();
-                    const struggleDisplay = struggleId ?? null;
+                    const struggleDisplay = struggleId
+                      ? struggleId === "__lesson_topic__"
+                        ? (userData.lessonTopicFromDashboard || "your lesson topic")
+                        : struggleId
+                      : null;
                     return struggleDisplay
                       ? `Welcome back, ${userData.userProfile.name}! Last time you struggled with ${struggleDisplay}. Ready to master it?`
                       : `Welcome back, ${userData.userProfile.name}! 👋`;
