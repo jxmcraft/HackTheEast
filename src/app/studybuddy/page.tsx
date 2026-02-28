@@ -128,8 +128,11 @@ export default function StudyBuddyPage() {
     }
   };
 
-  const handleAvatarStudioComplete = (config: { name: string; avatarConfig: Record<string, string>; personalityPrompt: string }) => {
-    initializeUser(config.name, config.avatarConfig, config.personalityPrompt);
+  const handleAvatarStudioComplete = (config: {
+    userProfile: { name: string; sex: string; birthday: string; email: string; profilePicture: string };
+    avatarProfile: { avatarName: string; avatarConfig: Record<string, string>; teachingStylePrompt: string; tutorVoice: string };
+  }) => {
+    initializeUser(config.userProfile, config.avatarProfile);
     setPageState("content-selection");
   };
 
@@ -175,8 +178,8 @@ export default function StudyBuddyPage() {
                       ? (getSectionById(struggleId)?.title ?? struggleId)
                       : null;
                     return struggleDisplay
-                      ? `Welcome back, ${userData.name}! Last time you struggled with ${struggleDisplay}. Ready to master it?`
-                      : `Welcome back, ${userData.name}! 👋`;
+                      ? `Welcome back, ${userData.userProfile.name}! Last time you struggled with ${struggleDisplay}. Ready to master it?`
+                      : `Welcome back, ${userData.userProfile.name}! 👋`;
                   })()}
                 </h1>
                 <p className="text-gray-600">

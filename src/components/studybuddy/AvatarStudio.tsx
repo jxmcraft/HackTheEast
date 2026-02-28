@@ -9,7 +9,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { createAvatar } from "@dicebear/core";
 import { personas } from "@dicebear/collection";
-import { getUserData } from "@/lib/studybuddyStorage";
+import { getUserData, saveUserData, type AvatarProfile, type UserProfile } from "@/lib/studybuddyStorage";
 import { stopAllVoice, STOP_ALL_VOICE_EVENT } from "@/lib/voiceControl";
 
 /** Personas customization options */
@@ -155,9 +155,8 @@ const DEFAULT_AVATAR_CONFIG = {
 };
 
 export interface AvatarConfig {
-  name: string;
-  avatarConfig: Record<string, string>;
-  personalityPrompt: string;
+  userProfile: UserProfile;
+  avatarProfile: AvatarProfile;
 }
 
 /**
@@ -226,8 +225,16 @@ export default function AvatarStudio({
 }: {
   onComplete?: (config: AvatarConfig) => void;
 }) {
-  const [name, setName] = useState("");
-  const [personalityPrompt, setPersonalityPrompt] = useState("");
+  const [userProfile, setUserProfile] = useState<UserProfile>({
+    name: "",
+    sex: "",
+    birthday: "",
+    email: "",
+    profilePicture: "",
+  });
+  const [avatarName, setAvatarName] = useState("");
+  const [profilePage, setProfilePage] = useState<"user" | "avatar">("user");
+  const [personalityPrompt, setPersonalityPrompt] = useState("be clear and helpful");
   const [avatarConfig, setAvatarConfig] = useState<Record<string, string>>(DEFAULT_AVATAR_CONFIG);
   const [isLoading, setIsLoading] = useState(true);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
@@ -239,20 +246,15 @@ export default function AvatarStudio({
 
   // Load from localStorage on mount
   useEffect(() => {
-    const savedData = localStorage.getItem("studybuddy_user");
-    if (savedData) {
-      try {
-        const { name: savedName, avatarConfig: savedConfig, personalityPrompt: savedPrompt } = JSON.parse(savedData);
-        if (savedName) setName(savedName);
-        if (savedConfig) {
-          setAvatarConfig((prev) => ({ ...DEFAULT_AVATAR_CONFIG, ...prev, ...savedConfig }));
-          if (savedConfig.avatarSource === "upload" && savedConfig.customImageUrl) {
-            setUploadedImage(savedConfig.customImageUrl);
-          }
-        }
-        if (savedPrompt) setPersonalityPrompt(savedPrompt);
-      } catch (e) {
-        console.error("Failed to load saved avatar data:", e);
+    const userData = getUserData();
+    if (userData) {
+      setUserProfile(userData.userProfile);
+      setAvatarName(userData.avatarProfile.avatarName ?? "");
+      setPersonalityPrompt(userData.avatarProfile.teachingStylePrompt || "be clear and helpful");
+      const mergedConfig = { ...DEFAULT_AVATAR_CONFIG, ...(userData.avatarProfile.avatarConfig ?? {}) };
+      setAvatarConfig(mergedConfig);
+      if (mergedConfig.avatarSource === "upload" && mergedConfig.customImageUrl) {
+        setUploadedImage(mergedConfig.customImageUrl);
       }
     }
     setIsLoading(false);
@@ -261,17 +263,24 @@ export default function AvatarStudio({
   // Save to localStorage when data changes
   useEffect(() => {
     if (!isLoading) {
+      const existing = getUserData();
       const userData = {
-        name,
-        avatarConfig,
-        personalityPrompt,
-        struggles: getUserData()?.struggles ?? [],
-        lastTopic: getUserData()?.lastTopic ?? "neural_networks",
-        lastSection: getUserData()?.lastSection ?? "intro",
+        userProfile,
+        avatarProfile: {
+          avatarName,
+          avatarConfig,
+          teachingStylePrompt: personalityPrompt,
+          tutorVoice: avatarConfig.voiceId || DEFAULT_AVATAR_CONFIG.voiceId,
+        },
+        struggles: existing?.struggles ?? [],
+        lastTopic: existing?.lastTopic ?? "neural_networks",
+        lastSection: existing?.lastSection ?? "intro",
+        completedSections: existing?.completedSections ?? [],
+        practiceResults: existing?.practiceResults ?? [],
       };
-      localStorage.setItem("studybuddy_user", JSON.stringify(userData));
+      saveUserData(userData);
     }
-  }, [name, avatarConfig, personalityPrompt, isLoading]);
+  }, [userProfile, avatarName, avatarConfig, personalityPrompt, isLoading]);
 
   useEffect(() => {
     const onStopAll = () => {
@@ -283,8 +292,12 @@ export default function AvatarStudio({
     return () => window.removeEventListener(STOP_ALL_VOICE_EVENT, onStopAll);
   }, []);
 
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setName(e.target.value);
+  const handleUserProfileChange = (key: keyof UserProfile, value: string) => {
+    setUserProfile((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleAvatarNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setAvatarName(e.target.value);
   };
 
   const handlePersonalityChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -335,6 +348,21 @@ export default function AvatarStudio({
     e.target.value = "";
   };
 
+  const handleProfilePictureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith("image/")) {
+      alert("Please select an image file (JPEG, PNG, etc.)");
+      return;
+    }
+    try {
+      const dataUrl = await resizeImage(file);
+      handleUserProfileChange("profilePicture", dataUrl);
+    } catch {
+      alert("Failed to process profile image");
+    }
+    e.target.value = "";
+  };
+
   const handleApplyStyle = async () => {
     const sourceImage = uploadedImage || avatarConfig.customImageUrl;
     if (!sourceImage) return;
@@ -378,7 +406,7 @@ export default function AvatarStudio({
   };
 
   const playVoiceDemo = async (voiceId: string) => {
-    const displayName = name.trim() || "your tutor";
+    const displayName = avatarName.trim() || "your tutor";
     const demoText = `Hi, I am ${displayName}. Looking forward to work with you closely in the future.`;
     if (playingVoiceDemo) {
       demoAudioRef.current?.pause();
@@ -423,13 +451,29 @@ export default function AvatarStudio({
   }
 
   const handleComplete = () => {
-    if (!name.trim() || !personalityPrompt.trim()) {
-      alert("Please enter your name and teaching style prompt");
+    if (!userProfile.name.trim() || !avatarName.trim() || !personalityPrompt.trim()) {
+      alert("Please complete your user name, avatar name, and teaching style prompt");
       return;
     }
     if (onComplete) {
-      onComplete({ name, avatarConfig, personalityPrompt });
+      onComplete({
+        userProfile,
+        avatarProfile: {
+          avatarName,
+          avatarConfig,
+          teachingStylePrompt: personalityPrompt,
+          tutorVoice: avatarConfig.voiceId || DEFAULT_AVATAR_CONFIG.voiceId,
+        },
+      });
     }
+  };
+
+  const handleClearAvatar = () => {
+    if (!window.confirm("Clear avatar profile and reset avatar settings?")) return;
+    setAvatarName("");
+    setPersonalityPrompt("be clear and helpful");
+    setAvatarConfig(DEFAULT_AVATAR_CONFIG);
+    setUploadedImage(null);
   };
 
   if (isLoading) {
@@ -479,69 +523,171 @@ export default function AvatarStudio({
           {/* Left: Avatar Preview */}
           <div className="flex flex-col items-center justify-center">
             <div className="bg-white rounded-2xl shadow-lg p-8 mb-6 w-full">
-              <div className="flex justify-center mb-4">
-                <div className="w-48 h-48 rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center">
-                  <CustomAvatar name={name} avatarConfig={avatarConfig} size={192} />
+              {profilePage === "user" ? (
+                <div className="rounded-xl border border-gray-200 p-6 flex flex-col items-center justify-center bg-gray-50">
+                  {userProfile.profilePicture ? (
+                    <img src={userProfile.profilePicture} alt="User profile" className="w-36 h-36 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-36 h-36 rounded-full bg-gray-200" />
+                  )}
+                  <p className="mt-3 text-base font-semibold text-gray-800">
+                    {userProfile.name || "Your Profile"}
+                  </p>
+                  <p className="text-sm text-gray-600">User Profile</p>
                 </div>
-              </div>
-              {name && (
-                <p className="text-center text-xl font-semibold text-gray-900">
-                  Hi, I&apos;m {name}! 👋
-                </p>
+              ) : (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-gray-200 p-6 bg-gray-50">
+                    <div className="flex justify-center mb-4">
+                      <div className="w-48 h-48 rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center border border-gray-200">
+                        <CustomAvatar name={avatarName} avatarConfig={avatarConfig} size={192} />
+                      </div>
+                    </div>
+                    {avatarName && (
+                      <p className="text-center text-xl font-semibold text-gray-900">
+                        Hi, I&apos;m {avatarName}! 👋
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-white rounded-lg border border-gray-200 p-4">
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">Avatar Name</label>
+                    <input
+                      type="text"
+                      value={avatarName}
+                      onChange={handleAvatarNameChange}
+                      placeholder="Enter avatar name"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white text-gray-900 placeholder:text-gray-600"
+                    />
+                  </div>
+
+                  <div className="bg-white rounded-lg border border-gray-200 p-4">
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      Teaching Style Prompt
+                    </label>
+                    <p className="text-xs text-gray-700 mb-2">
+                      Describe how your tutor should teach (e.g., &quot;explain with enthusiasm, use sports analogies&quot;)
+                    </p>
+                    <textarea
+                      value={personalityPrompt}
+                      onChange={handlePersonalityChange}
+                      placeholder="e.g., Use sports analogies, be enthusiastic..."
+                      rows={4}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white text-gray-900 placeholder:text-gray-600 resize-none"
+                    />
+                  </div>
+                </div>
               )}
             </div>
           </div>
 
           {/* Right: Customization */}
           <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow p-4">
-              <label className="block text-sm font-semibold text-gray-900 mb-2">Your Name</label>
-              <input
-                type="text"
-                value={name}
-                onChange={handleNameChange}
-                placeholder="Enter your name"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white text-gray-900 placeholder:text-gray-600"
-              />
+            <div className="bg-white rounded-lg shadow p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-600">Profile Setup</p>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  {profilePage === "user" ? "User Profile" : "Avatar Profile"}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProfilePage((prev) => (prev === "user" ? "avatar" : "user"))}
+                className="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm font-medium text-gray-800"
+              >
+                {profilePage === "user" ? "Go to Avatar →" : "← Go to User"}
+              </button>
             </div>
 
-            {/* Avatar Source: Generated vs Upload */}
-            <div className="bg-white rounded-lg shadow p-4 space-y-4">
-              <h3 className="font-semibold text-gray-900">Avatar</h3>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleAvatarChange("avatarSource", "generated");
-                    setUploadedImage(null);
-                  }}
-                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                    (avatarConfig.avatarSource || "generated") === "generated"
-                      ? "bg-purple-600 text-white"
-                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                  }`}
-                >
-                  Generated
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                    avatarConfig.avatarSource === "upload"
-                      ? "bg-purple-600 text-white"
-                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                  }`}
-                >
-                  Upload Photo
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
+            {profilePage === "user" && (
+              <div className="bg-white rounded-lg shadow p-4">
+                <label className="block text-sm font-semibold text-gray-900 mb-2">User Profile</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                  <input
+                    type="text"
+                    value={userProfile.name}
+                    onChange={(e) => handleUserProfileChange("name", e.target.value)}
+                    placeholder="Name"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white text-gray-900 placeholder:text-gray-600"
+                  />
+                  <select
+                    value={userProfile.sex}
+                    onChange={(e) => handleUserProfileChange("sex", e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white text-gray-900"
+                  >
+                    <option value="">Sex</option>
+                    <option value="female">Female</option>
+                    <option value="male">Male</option>
+                    <option value="other">Other</option>
+                    <option value="prefer_not_to_say">Prefer not to say</option>
+                  </select>
+                  <input
+                    type="date"
+                    value={userProfile.birthday}
+                    onChange={(e) => handleUserProfileChange("birthday", e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white text-gray-900"
+                  />
+                  <input
+                    type="email"
+                    value={userProfile.email}
+                    onChange={(e) => handleUserProfileChange("email", e.target.value)}
+                    placeholder="Email"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white text-gray-900 placeholder:text-gray-600"
+                  />
+                </div>
+                <div className="flex items-center gap-3">
+                  {userProfile.profilePicture ? (
+                    <img src={userProfile.profilePicture} alt="Profile" className="w-12 h-12 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-gray-200" />
+                  )}
+                  <label className="inline-flex items-center px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg cursor-pointer">
+                    Upload profile picture
+                    <input type="file" accept="image/*" onChange={handleProfilePictureUpload} className="hidden" />
+                  </label>
+                </div>
               </div>
+            )}
+
+            {profilePage === "avatar" && (
+              <>
+                {/* Avatar Source: Generated vs Upload */}
+                <div className="bg-white rounded-lg shadow p-4 space-y-4">
+                  <h3 className="font-semibold text-gray-900">Avatar</h3>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleAvatarChange("avatarSource", "generated");
+                        setUploadedImage(null);
+                      }}
+                      className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                        (avatarConfig.avatarSource || "generated") === "generated"
+                          ? "bg-purple-600 text-white"
+                          : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                      }`}
+                    >
+                      Generated
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                        avatarConfig.avatarSource === "upload"
+                          ? "bg-purple-600 text-white"
+                          : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                      }`}
+                    >
+                      Upload Photo
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                  </div>
 
               {avatarConfig.avatarSource === "upload" && (
                 <div className="space-y-3 pt-2 border-t border-gray-200">
@@ -576,12 +722,12 @@ export default function AvatarStudio({
                   )}
                 </div>
               )}
-            </div>
+                </div>
 
-            {(avatarConfig.avatarSource || "generated") === "generated" && (
-            <div className="bg-white rounded-lg shadow p-4 space-y-4">
-              <h3 className="font-semibold text-gray-900">Customize Appearance</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {(avatarConfig.avatarSource || "generated") === "generated" && (
+                <div className="bg-white rounded-lg shadow p-4 space-y-4">
+                  <h3 className="font-semibold text-gray-900">Customize Appearance</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <SelectField
                   label="Body"
                   value={avatarConfig.body || DEFAULT_AVATAR_CONFIG.body}
@@ -636,30 +782,14 @@ export default function AvatarStudio({
                   onChangeKey="clothingColor"
                   options={CLOTHING_COLOR_OPTIONS}
                 />
-              </div>
-            </div>
-            )}
+                  </div>
+                </div>
+                )}
 
-            <div className="bg-white rounded-lg shadow p-4">
-              <label className="block text-sm font-semibold text-gray-900 mb-2">
-                Teaching Style Prompt
-              </label>
-              <p className="text-xs text-gray-700 mb-2">
-                Describe how your tutor should teach (e.g., &quot;explain with enthusiasm, use sports analogies&quot;)
-              </p>
-              <textarea
-                value={personalityPrompt}
-                onChange={handlePersonalityChange}
-                placeholder="e.g., Use sports analogies, be enthusiastic..."
-                rows={4}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white text-gray-900 placeholder:text-gray-600 resize-none"
-              />
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-4 space-y-3">
-              <h3 className="font-semibold text-gray-900">Tutor voice</h3>
-              <p className="text-xs text-gray-700">Choose a voice and click to hear a demo.</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                <div className="bg-white rounded-lg shadow p-4 space-y-3">
+                  <h3 className="font-semibold text-gray-900">Tutor voice</h3>
+                  <p className="text-xs text-gray-700">Choose a voice and click to hear a demo.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
                 {VOICE_OPTIONS.map((v) => (
                   <button
                     key={v.value}
@@ -682,15 +812,25 @@ export default function AvatarStudio({
                     )}
                   </button>
                 ))}
-              </div>
-            </div>
+                  </div>
+                </div>
 
-            <button
-              onClick={handleComplete}
-              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold py-3 rounded-lg transition-all"
-            >
-              Start Learning
-            </button>
+                <button
+                  type="button"
+                  onClick={handleClearAvatar}
+                  className="w-full border border-red-300 bg-red-50 hover:bg-red-100 text-red-700 font-medium py-3 rounded-lg transition-all"
+                >
+                  Reset / Clear Avatar
+                </button>
+
+                <button
+                  onClick={handleComplete}
+                  className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold py-3 rounded-lg transition-all"
+                >
+                  Start Learning
+                </button>
+              </>
+            )}
 
             <p className="text-xs text-gray-600 text-center">
               {avatarConfig.avatarSource === "upload"

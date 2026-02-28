@@ -27,7 +27,7 @@ export default function PersistentStudyBuddyAvatar() {
     };
   }, [pathname]);
 
-  if (!userData?.name || !userData?.avatarConfig) return null;
+  if (!userData?.avatarProfile.avatarName || !userData?.avatarProfile.avatarConfig) return null;
 
   return (
     <div className="fixed bottom-6 right-6 z-50">
@@ -41,15 +41,15 @@ export default function PersistentStudyBuddyAvatar() {
           style={{ width: PERSISTENT_AVATAR_SIZE, height: PERSISTENT_AVATAR_SIZE }}
         >
           <TalkingAvatar
-            name={userData.name}
-            avatarConfig={userData.avatarConfig}
+            name={userData.avatarProfile.avatarName}
+            avatarConfig={userData.avatarProfile.avatarConfig}
             size={PERSISTENT_AVATAR_SIZE}
             isSpeaking={false}
             interactive={true}
           />
         </div>
         <span className="text-sm font-medium text-[var(--foreground)] hidden sm:inline">
-          {userData.name}
+          {userData.avatarProfile.avatarName}
         </span>
       </Link>
     </div>

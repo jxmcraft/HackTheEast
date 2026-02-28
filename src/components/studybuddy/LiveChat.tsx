@@ -74,8 +74,8 @@ export default function LiveChat({
     let displayName = "Student";
     if (userName) {
       try {
-        const { name } = JSON.parse(userName);
-        displayName = name;
+        const parsed = JSON.parse(userName);
+        displayName = parsed?.userProfile?.name || parsed?.name || displayName;
       } catch (e) {
         console.error("Failed to parse user data:", e);
       }
