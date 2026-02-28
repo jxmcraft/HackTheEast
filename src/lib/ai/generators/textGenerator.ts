@@ -25,6 +25,7 @@ const styleGuidance: Record<string, string> = {
   encouraging: "Be supportive, use positive reinforcement, and celebrate progress. Encourage the student.",
   socratic: "Ask guiding questions and lead the student to discover answers. Use Socratic method.",
 };
+void styleGuidance; // reserved for future use in prompt
 
 export async function generateTextLesson(params: {
   topic: string;

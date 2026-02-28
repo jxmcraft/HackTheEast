@@ -1,10 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import type { Session, User } from "@supabase/supabase-js";
 import { getSupabaseEnv, getServiceRoleEnv } from "./env";
 
-export function createClient() {
+export function createClient(): SupabaseClient | null {
   const env = getSupabaseEnv();
   if (!env) return null;
   const cookieStore = cookies();
@@ -24,6 +25,13 @@ export function createClient() {
       },
     },
   });
+}
+
+/** Like createClient() but throws if env is missing. Use in API routes for a non-null client type. */
+export function createClientOrThrow(): SupabaseClient {
+  const client = createClient();
+  if (!client) throw new Error("Supabase env not configured");
+  return client;
 }
 
 /**

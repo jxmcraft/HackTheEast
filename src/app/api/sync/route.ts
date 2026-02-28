@@ -6,9 +6,8 @@
  * Otherwise: runs full sync in request and returns 200 when done.
  */
 
-import { appendFileSync } from "fs";
 import { NextResponse } from "next/server";
-import { createClient, createServiceRoleClient } from "@/utils/supabase/server";
+import { createClientOrThrow, createServiceRoleClient } from "@/utils/supabase/server";
 import { getCanvasCredentialsFromProfile } from "@/lib/canvas-credentials";
 import {
   startSyncProgress,
@@ -22,17 +21,13 @@ import {
 import type { CanvasCourse, CanvasAssignment } from "@/lib/canvas";
 import { getServiceRoleEnv } from "@/utils/supabase/env";
 
-// #region agent log
-(() => { try { appendFileSync("/Users/symok/Desktop/HTE/.cursor/debug-1f53d4.log", JSON.stringify({ sessionId: "1f53d4", hypothesisId: "H1-server", location: "sync/route", message: "sync route module loaded", timestamp: Date.now() }) + "\n"); } catch (_) {} })();
-// #endregion
-
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 /** GET: Return stored courses and assignments from Supabase (persisted after sync). */
 export async function GET() {
-  const supabase = createClient();
+  const supabase = createClientOrThrow();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -86,12 +81,8 @@ export async function GET() {
 
 export async function POST() {
   try {
-    // #region agent log
-    try { appendFileSync("/Users/symok/Desktop/HTE/.cursor/debug-1f53d4.log", JSON.stringify({ sessionId: "1f53d4", hypothesisId: "H1-server", location: "sync/route:POST", message: "POST /api/sync entered", data: {}, timestamp: Date.now() }) + "\n"); } catch (_) {}
-    fetch('http://127.0.0.1:7816/ingest/dcfe79ee-b938-4a53-8e78-211d2e2b322f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1f53d4'},body:JSON.stringify({sessionId:'1f53d4',hypothesisId:'H1-server',location:'sync/route:POST',message:'POST /api/sync entered',data:{},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     const { syncCourses, syncAssignments } = await import("@/lib/canvas");
-    const supabase = createClient();
+    const supabase = createClientOrThrow();
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -269,8 +260,8 @@ export async function POST() {
             assignments: canvasAssignments.map((a) => ({
               id: a.id,
               name: a.name,
-              description: a.description,
-              due_at: a.due_at,
+              description: a.description ?? undefined,
+              due_at: a.due_at ?? undefined,
               course_id: a.course_id,
             })),
             ingest: ingestResults,
@@ -365,8 +356,8 @@ export async function POST() {
       assignments: canvasAssignments.map((a) => ({
         id: a.id,
         name: a.name,
-        description: a.description,
-        due_at: a.due_at,
+        description: a.description ?? undefined,
+        due_at: a.due_at ?? undefined,
         course_id: a.course_id,
       })),
       ingest: ingestResults,
@@ -381,18 +372,14 @@ export async function POST() {
       assignments: canvasAssignments.map((a) => ({
         id: a.id,
         name: a.name,
-        description: a.description,
-        due_at: a.due_at,
+        description: a.description ?? undefined,
+        due_at: a.due_at ?? undefined,
         course_id: a.course_id,
       })),
       ingest: ingestResults,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Sync failed";
-    // #region agent log
-    try { appendFileSync("/Users/symok/Desktop/HTE/.cursor/debug-1f53d4.log", JSON.stringify({ sessionId: "1f53d4", hypothesisId: "H1-server", location: "sync/route:POST", message: "POST /api/sync caught", data: { message }, timestamp: Date.now() }) + "\n"); } catch (_) {}
-    fetch('http://127.0.0.1:7816/ingest/dcfe79ee-b938-4a53-8e78-211d2e2b322f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1f53d4'},body:JSON.stringify({sessionId:'1f53d4',hypothesisId:'H1-server',location:'sync/route:POST',message:'POST /api/sync caught',data:{message},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     console.error("[POST /api/sync]", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }

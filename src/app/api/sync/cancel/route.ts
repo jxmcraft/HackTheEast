@@ -4,14 +4,14 @@
  */
 
 import { NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
+import { createClientOrThrow } from "@/utils/supabase/server";
 import { resetSyncProgress } from "@/lib/sync-progress-db";
 
 export const dynamic = "force-dynamic";
 
 export async function POST() {
   try {
-    const supabase = createClient();
+    const supabase = createClientOrThrow();
     const {
       data: { user },
     } = await supabase.auth.getUser();

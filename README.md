@@ -16,7 +16,7 @@ Next.js 14 (App Router) + TypeScript + Tailwind CSS + Supabase. Syncs courses, c
 
    - **Supabase:** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (from [Supabase](https://supabase.com) project settings). For **background sync** (sync runs without blocking the UI), also set `SUPABASE_SERVICE_ROLE_KEY` (Project Settings → API → service_role secret).
    - **Canvas:** Set per user in **Settings** (Canvas API URL and Access Token); no env vars.
-   - **LiteLLM (embeddings):** `LITELLM_EMBEDDING_API_BASE=http://localhost:4000`, `LITELLM_EMBEDDING_API_KEY=sk-1234`, `LITELLM_EMBEDDING_MODEL=minimax-embed`. Minimax credentials are set in the proxy’s environment; Featherless is chat-only (no embeddings API).
+   - **Embeddings (sync & semantic search):** **Local in-process model** by default — no API keys or separate server. When you run the app (`bun dev`), the embedding model loads on first use (**all-MiniLM-L6-v2**, 384 dimensions). Run the migration `supabase/migrations/20250228100010_embedding_384_local.sql` so the DB uses vector(384). Optional: set `EMBEDDING_PROVIDER=openai` and `OPENAI_EMBEDDING_API_KEY` to use OpenAI instead.
 
 3. **Supabase schema**
 
@@ -26,7 +26,7 @@ Next.js 14 (App Router) + TypeScript + Tailwind CSS + Supabase. Syncs courses, c
 
 4. **Run the app**
 
-   All embedding requests go through the **LiteLLM proxy**. Run the proxy and the app.
+   Run Next.js: `bun dev`. Next.js: [http://localhost:3000](http://localhost:3000).
 
    LiteLLM is installed automatically when you run `bun install` (requires Python and pip). To install it manually: `bun run setup-litellm`.
 
@@ -37,7 +37,7 @@ Next.js 14 (App Router) + TypeScript + Tailwind CSS + Supabase. Syncs courses, c
 
    Set LiteLLM vars in your env: `LITELLM_EMBEDDING_API_BASE=http://localhost:4000`, `LITELLM_EMBEDDING_API_KEY=sk-1234` (match `master_key` in `litellm/config.yaml`), `LITELLM_EMBEDDING_MODEL=minimax-embed`. For the proxy (run `bun run proxy`): set `MINIMAX_API_KEY`, `MINIMAX_GROUP_ID`, and `OPENAI_API_KEY` (same as `MINIMAX_API_KEY`) so embeddings work. See `litellm/config.yaml` for details.
 
-   **Test embeddings:** With app and proxy running, open http://localhost:3000/api/embedding-test. You should get `{ "ok": true, "dimensions": 1536, ... }` when configured correctly.
+   **Test embeddings:** With app (and optionally proxy) running, open http://localhost:3000/api/embedding-test. You should get `{ "ok": true, "dimensions": 384, ... }` when using the local model (all-MiniLM-L6-v2), or the proxy's dimensions when using LiteLLM.
 
    **Lesson generation (Phase 3):** Set `FEATHERLESS_API_KEY` in `.env.local` for chat completions (works in Hong Kong and globally; no OpenAI required). Optional: `FEATHERLESS_CHAT_MODEL` (default: `Qwen/Qwen2.5-7B-Instruct`). Alternatively set `OPENAI_API_KEY` for OpenAI.
 

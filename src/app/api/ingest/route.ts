@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/utils/supabase/server";
-import { createClient } from "@/utils/supabase/server";
+import { createClientOrThrow } from "@/utils/supabase/server";
 import { getCanvasCredentialsFromProfile } from "@/lib/canvas-credentials";
 import { CanvasAPIClient } from "@/lib/canvas/ingest";
 import { ingestCourseMaterials } from "@/lib/canvas/ingest";
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const supabase = createClient();
+    const supabase = createClientOrThrow();
     const canvasId = Number(courseId);
     if (Number.isNaN(canvasId)) {
       return NextResponse.json({ error: "courseId must be a numeric Canvas course ID." }, { status: 400 });

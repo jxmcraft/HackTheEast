@@ -11,6 +11,7 @@ export async function GET(request: Request) {
   if (code) {
     try {
       const supabase = createClient();
+      if (!supabase) return NextResponse.redirect(new URL("/auth/signin?error=callback_failed", url.origin));
       await supabase.auth.exchangeCodeForSession(code);
     } catch {
       return NextResponse.redirect(new URL("/auth/signin?error=callback_failed", url.origin));

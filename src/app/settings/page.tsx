@@ -1,16 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/utils/supabase/server";
+import { createClientOrThrow } from "@/utils/supabase/server";
 import { SettingsFormFull } from "./SettingsFormFull";
 import type { LearningMode } from "@/components/settings/LearningModeSelector";
 import type { AvatarStyle } from "@/components/settings/AvatarCustomizer";
 
 export default async function SettingsPage() {
-  const supabase = createClient();
-  if (!supabase) redirect("/login");
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const supabase = createClientOrThrow();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
   const [{ data: prefs }, { data: profile }] = await Promise.all([

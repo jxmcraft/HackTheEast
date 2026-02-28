@@ -175,20 +175,6 @@ export function CustomAvatar({
 }) {
   const cfg = { ...DEFAULT_AVATAR_CONFIG, ...avatarConfig };
 
-  if (cfg.avatarSource === "upload" && cfg.customImageUrl) {
-    const filter = cfg.customImageFilter ? { filter: cfg.customImageFilter } : undefined;
-    return (
-      <img
-        src={cfg.customImageUrl}
-        alt="Avatar"
-        width={size}
-        height={size}
-        className="rounded-full object-cover"
-        style={filter}
-      />
-    );
-  }
-
   const dataUri = useMemo(() => {
     const options: Record<string, unknown> = {
       seed: name || "user",
@@ -208,7 +194,21 @@ export function CustomAvatar({
       options.facialHair = [cfg.facialHair];
     }
     return createAvatar(personas, options).toDataUri();
-  }, [name, avatarConfig, size]);
+  }, [name, avatarConfig, size, cfg.body, cfg.clothingColor, cfg.eyes, cfg.facialHair, cfg.hair, cfg.hairColor, cfg.mouth, cfg.nose, cfg.skinColor]);
+
+  if (cfg.avatarSource === "upload" && cfg.customImageUrl) {
+    const filter = (cfg as Record<string, string>).customImageFilter ? { filter: (cfg as Record<string, string>).customImageFilter } : undefined;
+    return (
+      <img
+        src={cfg.customImageUrl}
+        alt="Avatar"
+        width={size}
+        height={size}
+        className="rounded-full object-cover"
+        style={filter}
+      />
+    );
+  }
 
   return (
     <img

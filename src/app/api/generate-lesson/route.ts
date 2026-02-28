@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
+import { createClientOrThrow } from "@/utils/supabase/server";
 import { generateLessonWithFallback, getCourseUuid } from "@/lib/ai/lessonFallback";
 import type { LearningMode } from "@/lib/ai/types";
 
@@ -22,10 +22,7 @@ type GenerateBody = {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient();
-    if (!supabase) {
-      return NextResponse.json({ error: "Service unavailable" }, { status: 503 });
-    }
+    const supabase = createClientOrThrow();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -7,6 +7,7 @@ import type { CanvasConfig } from "@/lib/canvas";
  */
 export async function getCanvasCredentialsFromProfile(): Promise<Partial<CanvasConfig> | undefined> {
   const supabase = createClient();
+  if (!supabase) return undefined;
   const {
     data: { user },
   } = await supabase.auth.getUser();

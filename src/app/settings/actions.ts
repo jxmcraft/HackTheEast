@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/utils/supabase/server";
+import { createClientOrThrow } from "@/utils/supabase/server";
 import type { LearningMode } from "@/components/settings/LearningModeSelector";
 import type { AvatarStyle } from "@/components/settings/AvatarCustomizer";
 
@@ -12,7 +12,7 @@ export async function updatePreferences(formData: FormData) {
   if (!["text", "audio", "slides"].includes(learningMode)) throw new Error("Invalid learning_mode");
   if (!["strict", "encouraging", "socratic"].includes(avatarStyle)) throw new Error("Invalid avatar_style");
 
-  const supabase = createClient();
+  const supabase = createClientOrThrow();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
@@ -34,7 +34,7 @@ export async function updateCanvasCredentials(formData: FormData) {
   const canvasApiUrl = String(formData.get("canvas_api_url") ?? "").trim() || null;
   const canvasApiKey = String(formData.get("canvas_api_key") ?? "").trim() || null;
 
-  const supabase = createClient();
+  const supabase = createClientOrThrow();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -56,7 +56,7 @@ export async function updateCanvasCredentials(formData: FormData) {
 }
 
 export async function setLastCanvasSyncAt() {
-  const supabase = createClient();
+  const supabase = createClientOrThrow();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
   const { error } = await supabase

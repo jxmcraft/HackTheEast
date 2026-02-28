@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/utils/supabase/server";
+import { createClientOrThrow } from "@/utils/supabase/server";
 import { LessonContent } from "@/components/lesson/LessonContent";
 
 type Props = { params: Promise<{ courseId: string; topic: string }>; searchParams: Promise<{ context?: string; lessonId?: string }> };
@@ -15,7 +15,7 @@ export default async function LessonPage({ params, searchParams }: Props) {
   const topicDecoded = decodeURIComponent(topic.replace(/-/g, " "));
   if (!topicDecoded.trim()) notFound();
 
-  const supabase = createClient();
+  const supabase = createClientOrThrow();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/lesson/" + courseId + "/" + topic);
 

@@ -7,6 +7,7 @@ import { createClient } from "@/utils/supabase/server";
  */
 export async function requireUser(options?: { redirectTo?: string }) {
   const supabase = createClient();
+  if (!supabase) redirect(options?.redirectTo ?? "/sync-dashboard");
   const {
     data: { user },
   } = await supabase.auth.getUser();

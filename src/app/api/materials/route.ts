@@ -5,7 +5,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
+import { createClientOrThrow } from "@/utils/supabase/server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,7 +23,7 @@ function baseCanvasItemId(canvasItemId: string): string {
 }
 
 export async function GET() {
-  const supabase = createClient();
+  const supabase = createClientOrThrow();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -117,7 +117,8 @@ export async function GET() {
     });
   }
 
-  for (const c of byCourse.values()) {
+  const courses = Array.from(byCourse.values());
+  for (const c of courses) {
     c.materials.sort((a, b) =>
       (a.metadata?.title ?? a.canvas_item_id).localeCompare(
         b.metadata?.title ?? b.canvas_item_id,
@@ -126,7 +127,5 @@ export async function GET() {
       )
     );
   }
-
-  const courses = Array.from(byCourse.values());
   return NextResponse.json({ courses });
 }

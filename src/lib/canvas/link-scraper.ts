@@ -129,7 +129,7 @@ export async function crawlLinkedPages(
 
     if (depth >= maxDepth) continue;
     const htmlForLinks = "rawHtml" in page && page.rawHtml ? page.rawHtml : "";
-    const nestedLinks = extractLinksFromHTML(htmlForLinks, page.url);
+    const nestedLinks = extractLinksFromHTML(String(htmlForLinks), String(page.url ?? ""));
     const toEnqueue = nestedLinks
       .filter((u) => {
         const n = u.replace(/#.*$/, "").replace(/\/$/, "");

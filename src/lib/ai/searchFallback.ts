@@ -18,7 +18,6 @@ const SEARCH_TIMEOUT_MS = 10_000;
  */
 export async function searchWebForTopic(
   topic: string,
-  _courseInfo?: { courseName?: string }
 ): Promise<WebSearchResult[] | null> {
   // Optional: integrate with SERP API, Bing Search API, or similar.
   // For now, no API key = no web search; fall back to Tier 1.

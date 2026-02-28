@@ -61,7 +61,9 @@ export function SlidesLessonView({ slides, lessonId, topic, context, onSlideUpda
     if (!emblaApi) return;
     onSelect();
     emblaApi.on("select", onSelect);
-    return () => emblaApi.off("select", onSelect);
+    return () => {
+      emblaApi.off("select", onSelect);
+    };
   }, [emblaApi, onSelect]);
 
   if (!slides.length) return null;

@@ -462,10 +462,15 @@ export async function ingestCourseMaterials(
               console.warn(`Failed to extract PDF/PPTX for file ${file.id}:`, e instanceof Error ? e.message : e);
             }
           }
+          // Only embed extracted text, never the file URL or raw file content
+          const textToStore =
+            typeof contentText === "string" && !/^https?:\/\/[^\s]+\.(pdf|pptx)(\?|$)/i.test(contentText.trim())
+              ? contentText
+              : title;
           await addMaterial(
             `file-${courseId}-${file.id}`,
             "file",
-            contentText,
+            textToStore,
             {
               ...baseMeta,
               title,

@@ -15,6 +15,7 @@ export async function login(formData: FormData): Promise<LoginResult> {
   }
 
   const supabase = createClient();
+  if (!supabase) return { error: "Server configuration error." };
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
@@ -35,6 +36,7 @@ export async function signup(formData: FormData) {
   }
 
   const supabase = createClient();
+  if (!supabase) throw new Error("Server configuration error.");
   const { error } = await supabase.auth.signUp({
     email,
     password,
@@ -52,7 +54,7 @@ export async function signup(formData: FormData) {
 
 export async function signout() {
   const supabase = createClient();
-  await supabase.auth.signOut();
+  if (supabase) await supabase.auth.signOut();
   redirect("/");
 }
 

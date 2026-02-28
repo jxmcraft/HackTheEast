@@ -23,6 +23,7 @@ export function SettingsFormFull({
   canvasApiKey: string;
   lastCanvasSyncAt: string | null;
 }) {
+  void lastCanvasSyncAt; // reserved for display
   const [learningMode, setLearningMode] = useState<LearningMode>(preferences.learning_mode);
   const [avatarStyle, setAvatarStyle] = useState<AvatarStyle>(preferences.avatar_style);
   const [avatarName, setAvatarName] = useState(preferences.avatar_name ?? "");

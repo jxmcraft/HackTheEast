@@ -1,30 +1,30 @@
-# LiteLLM Proxy: all LLM/embedding requests from the app go through this proxy.
-# Only Minimax and Featherless are configured here; the app uses LITELLM_* in env.
+# LiteLLM Proxy: optional for embeddings. App uses MiniMax embedding API directly when keys are set.
+#
+# Embeddings (recommended): set MINIMAX_API_KEY and MINIMAX_GROUP_ID — app calls
+#   https://api.minimax.chat/v1/embeddings directly (no proxy required).
+# Alternative: run this proxy and set LITELLM_EMBEDDING_API_BASE=http://localhost:4000,
+#   LITELLM_EMBEDDING_API_KEY=sk-1234, LITELLM_EMBEDDING_MODEL=minimax-embed (proxy env: MINIMAX_API_KEY, MINIMAX_GROUP_ID).
+#
+# Featherless: chat/completions only. It does not provide an embeddings API; do not use for embeddings.
 #
 # Install: pip install 'litellm[proxy]'
 # Run: bun run proxy (in one terminal); bun dev (in another).
 # Default port: 4000. Set LITELLM_EMBEDDING_API_BASE=http://localhost:4000 in env.
+# Local embeddings (default): no proxy needed; app uses all-MiniLM-L6-v2 in-process. Use proxy only if you want MiniMax/OpenAI embeddings via LiteLLM.
 #
 # Proxy env (no OpenAI connection - keys are loaded when you run "bun run proxy"):
 #   For minimax-embed: MINIMAX_API_KEY, MINIMAX_GROUP_ID, OPENAI_API_KEY=$MINIMAX_API_KEY
 #   For featherless-embed: FEATHERLESS_API_KEY, OPENAI_API_KEY=$FEATHERLESS_API_KEY
 
 model_list:
-  # Minimax embedding (embo-01)
+  # MiniMax embedding (embo-01). Official host: api.minimax.chat (see LangChain / MiniMax docs).
   - model_name: minimax-embed
     litellm_params:
       model: openai/embo-01
       api_base: https://api.minimax.chat/v1
       api_key: os.environ/MINIMAX_API_KEY
-    model_info:
-      mode: embedding
-
-  # Featherless embedding (OpenAI-compatible; api_base points to Featherless)
-  - model_name: featherless-embed
-    litellm_params:
-      model: openai/text-embedding-3-small
-      api_base: https://api.featherless.ai/v1
-      api_key: os.environ/FEATHERLESS_API_KEY
+      extra_headers:
+        "Group-Id": "os.environ/MINIMAX_GROUP_ID"
     model_info:
       mode: embedding
 

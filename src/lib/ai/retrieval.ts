@@ -3,7 +3,7 @@
  * Uses embeddings (LiteLLM) and Supabase match_course_materials.
  */
 
-import { createClient } from "@/utils/supabase/server";
+import { createClientOrThrow } from "@/utils/supabase/server";
 import { generateEmbedding } from "@/lib/embeddings";
 
 export type RetrievedMaterial = {
@@ -26,7 +26,7 @@ const CHARS_PER_TOKEN_EST = 4;
  * Resolve Canvas course ID + user to internal course UUID (for course_materials.course_id).
  */
 export async function getCourseUuid(canvasCourseId: string, userId: string): Promise<string | null> {
-  const supabase = createClient();
+  const supabase = createClientOrThrow();
   const canvasId = Number(canvasCourseId);
   if (!Number.isInteger(canvasId)) return null;
   const { data } = await supabase
@@ -63,13 +63,13 @@ export async function retrieveRelevantMaterials(params: {
 
   let embedding: number[];
   try {
-    embedding = await generateEmbedding(cleanedTopic);
+    embedding = await generateEmbedding(cleanedTopic, "query");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`Embedding failed: ${msg}`);
   }
 
-  const supabase = createClient();
+  const supabase = createClientOrThrow();
   const { data, error } = await supabase.rpc("match_course_materials", {
     query_embedding: embedding,
     match_count: limit,

@@ -3,7 +3,6 @@
 import { useState, useMemo } from "react";
 import { Loader2, Search } from "lucide-react";
 import { CourseCard, type CourseOption } from "./CourseCard";
-import { cn } from "@/lib/utils";
 
 export function CourseSelector({
   courses,

@@ -107,9 +107,6 @@ export default function SyncDashboardPage() {
       const res = await fetch("/api/sync");
       const contentType = res.headers.get("content-type") ?? "";
       const text = await res.text();
-      // #region agent log
-      fetch('http://127.0.0.1:7816/ingest/dcfe79ee-b938-4a53-8e78-211d2e2b322f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1f53d4'},body:JSON.stringify({sessionId:'1f53d4',hypothesisId:'H2',location:'sync-dashboard:loadStoredSync',message:'GET /api/sync response',data:{status:res.status,contentType,bodyPreview:text.slice(0,120),isHtml:text.trimStart().startsWith('<')},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       if (!res.ok) return;
       let data: { courses?: unknown[]; assignments?: unknown[] };
       try {
@@ -117,8 +114,8 @@ export default function SyncDashboardPage() {
       } catch {
         return;
       }
-      setCourses(Array.isArray(data.courses) ? data.courses : []);
-      setAssignments(Array.isArray(data.assignments) ? data.assignments : []);
+      setCourses(Array.isArray(data.courses) ? (data.courses as CanvasCourse[]) : []);
+      setAssignments(Array.isArray(data.assignments) ? (data.assignments as CanvasAssignment[]) : []);
     } catch {
       setCourses([]);
       setAssignments([]);
@@ -233,9 +230,6 @@ export default function SyncDashboardPage() {
       const res = await fetch("/api/sync", { method: "POST" });
       const contentType = res.headers.get("content-type") ?? "";
       const text = await res.text();
-      // #region agent log
-      fetch('http://127.0.0.1:7816/ingest/dcfe79ee-b938-4a53-8e78-211d2e2b322f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1f53d4'},body:JSON.stringify({sessionId:'1f53d4',hypothesisId:'H1',location:'sync-dashboard:syncAll',message:'POST /api/sync response',data:{status:res.status,contentType,bodyPreview:text.slice(0,120),isHtml:text.trimStart().startsWith('<')},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       let data: { courses?: unknown[]; assignments?: unknown[]; error?: string; jobId?: string };
       try {
         data = JSON.parse(text) as typeof data;
@@ -252,8 +246,8 @@ export default function SyncDashboardPage() {
         return;
       }
 
-      setCourses(Array.isArray(data.courses) ? data.courses : []);
-      setAssignments(Array.isArray(data.assignments) ? data.assignments : []);
+      setCourses(Array.isArray(data.courses) ? (data.courses as CanvasCourse[]) : []);
+      setAssignments(Array.isArray(data.assignments) ? (data.assignments as CanvasAssignment[]) : []);
       setLastSyncAt(new Date().toISOString());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");

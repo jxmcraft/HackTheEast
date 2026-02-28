@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { login } from "@/app/auth/actions";
 import { getUser } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 

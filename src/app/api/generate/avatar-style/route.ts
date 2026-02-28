@@ -68,7 +68,7 @@ async function styleWithStability(
   if (!apiKey) return { error: "STABILITY_API_KEY not set" };
 
   const form = new FormData();
-  form.append("init_image", new Blob([imageBuffer], { type: mime }), "image.jpg");
+  form.append("init_image", new Blob([new Uint8Array(imageBuffer)], { type: mime }), "image.jpg");
   form.append("text_prompts[0][text]", prompt);
   form.append("text_prompts[0][weight]", "1");
   form.append("init_image_mode", "IMAGE_STRENGTH");

@@ -5,19 +5,15 @@
 
 import { createHash } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createClient } from "@/utils/supabase/server";
+import { createClientOrThrow } from "@/utils/supabase/server";
 import type { IngestedMaterial } from "@/lib/canvas/ingest";
 import {
-  generateEmbedding,
+  generateEmbeddingBatch,
   EMBEDDING_DIM,
 } from "@/lib/embeddings";
 
 const CHUNK_OVERLAP = 100;
-const DELAY_MS = 300;
-
-function delay(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
+const EMBED_BATCH_SIZE = 32;
 
 /** Compute a stable hash of material content so we can skip re-ingesting unchanged content. */
 export function contentHash(contentText: string): string {
@@ -77,7 +73,7 @@ export async function storeCourseMaterials(
   materials: IngestedMaterial[],
   options?: { supabase?: SupabaseClient; onProgress?: (materialsInCourse: number, chunksInCourse: number) => void }
 ): Promise<{ materialsStored: number; chunksCreated: number }> {
-  const supabase = options?.supabase ?? createClient();
+  const supabase = options?.supabase ?? createClientOrThrow();
   let chunksCreated = 0;
   const seenMaterialKeys = new Set<string>();
 
@@ -99,29 +95,33 @@ export async function storeCourseMaterials(
     const chunks = chunkText(material.content_text);
     if (chunks.length === 0) continue;
 
+    let materialChunksCreated = 0;
+    const allEmbeddings: number[][] = [];
+    try {
+      for (let i = 0; i < chunks.length; i += EMBED_BATCH_SIZE) {
+        const batch = chunks.slice(i, i + EMBED_BATCH_SIZE);
+        const vectors = await generateEmbeddingBatch(batch);
+        allEmbeddings.push(...vectors);
+      }
+    } catch (err) {
+      console.warn(
+        `Embedding failed for ${material.canvas_item_id}:`,
+        err instanceof Error ? err.message : err
+      );
+      options?.onProgress?.(seenMaterialKeys.size, chunksCreated);
+      continue;
+    }
+
     for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i];
+      const embedding = allEmbeddings[i];
+      if (!embedding || embedding.length !== EMBEDDING_DIM) {
+        console.warn(
+          `Embedding dimension ${embedding?.length ?? 0} != ${EMBEDDING_DIM}, skipping ${material.canvas_item_id}-chunk-${i}`
+        );
+        continue;
+      }
       const canvasItemId = `${material.canvas_item_id}-chunk-${i}`;
-
-      let embedding: number[];
-      try {
-        await delay(DELAY_MS);
-        embedding = await generateEmbedding(chunk);
-      } catch (err) {
-        console.warn(
-          `Embedding failed for ${canvasItemId}:`,
-          err instanceof Error ? err.message : err
-        );
-        continue;
-      }
-
-      if (embedding.length !== EMBEDDING_DIM) {
-        console.warn(
-          `Embedding dimension ${embedding.length} != ${EMBEDDING_DIM}, skipping ${canvasItemId}`
-        );
-        continue;
-      }
-
+      const chunk = chunks[i];
       const { error } = await supabase.from("course_materials").insert({
         course_id: courseId,
         canvas_item_id: canvasItemId,
@@ -132,10 +132,17 @@ export async function storeCourseMaterials(
       });
 
       if (error) {
-        if (error.code === "23505") continue; // unique violation, skip
+        if (error.code === "23505") continue;
         throw error;
       }
       chunksCreated++;
+      materialChunksCreated++;
+    }
+
+    if (materialChunksCreated === 0) {
+      console.warn(
+        `[store] No chunks saved for ${material.canvas_item_id}: all embeddings failed. Embeddings use the local model by default; ensure the server can load it, or set EMBEDDING_PROVIDER=openai and OPENAI_EMBEDDING_API_KEY.`
+      );
     }
 
     const { error: hashErr } = await supabase
@@ -162,7 +169,7 @@ export async function storeCourseMaterials(
  * Delete all course_materials and their content hashes for a course (e.g. before re-sync).
  */
 export async function clearCourseMaterials(courseId: string): Promise<void> {
-  const supabase = createClient();
+  const supabase = createClientOrThrow();
   const { error: hashErr } = await supabase
     .from("material_content_hashes")
     .delete()
