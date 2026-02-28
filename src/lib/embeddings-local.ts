@@ -9,19 +9,23 @@
  */
 
 import path from "node:path";
+import os from "node:os";
 
 export const LOCAL_EMBED_DIM = 384;
 const MODEL_ID = "onnx-community/all-MiniLM-L6-v2-ONNX";
 const MAX_TEXT_LENGTH = 8_192;
 
-/** Project-scoped cache so one place to clear; safe in Node/Next server. */
+/** Project-scoped cache so one place to clear; safe in Node/Next server. On Vercel/serverless, use tmpdir (read-only fs). */
 function setCacheDir(env: { cacheDir?: string }): void {
-  if (typeof process !== "undefined" && process.cwd && env) {
-    try {
-      env.cacheDir = path.join(process.cwd(), ".cache");
-    } catch {
-      /* ignore */
-    }
+  if (typeof process === "undefined" || !env) return;
+  try {
+    // Vercel (and similar serverless) have read-only /var/task; use writable /tmp
+    const useTmp = !!process.env.VERCEL || process.cwd() === "/var/task";
+    env.cacheDir = useTmp
+      ? path.join(os.tmpdir(), "transformers-cache")
+      : path.join(process.cwd(), ".cache");
+  } catch {
+    /* ignore */
   }
 }
 
