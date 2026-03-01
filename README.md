@@ -2,7 +2,11 @@
 
 **Mastering Insight** – Next.js 14 (App Router) + TypeScript + Tailwind CSS + Supabase. Sync courses, calendar, and assignments from Canvas LMS; study with AI-generated lessons, a Study Buddy, and Instagram-style reels.
 
-**[Watch the demo](https://youtu.be/-W1GsITHeCg)** (YouTube)
+**Demo video**
+
+<video src="docs/demo.mp4" controls width="640"></video>
+
+**[Watch on YouTube](https://youtu.be/-W1GsITHeCg)**
 
 ## Features
 
