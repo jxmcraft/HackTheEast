@@ -46,7 +46,7 @@ export async function createVideoTask(prompt: string, options?: { duration?: num
   const body = {
     model: VIDEO_MODEL,
     prompt: prompt.slice(0, 2000),
-    duration: options?.duration ?? 6,
+    duration: options?.duration ?? 10,
     resolution: options?.resolution ?? "768P",
     prompt_optimizer: true,
   };

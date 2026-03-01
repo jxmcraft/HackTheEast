@@ -38,16 +38,21 @@ export async function createReelScript(content: string, topic?: string): Promise
 }
 
 /**
- * Create a short visual scene prompt for MiniMax text-to-video (no spoken words).
- * Describes the look and mood of the reel, not the narration.
+ * Create a short visual scene prompt for MiniMax text-to-video.
+ * Must specify: someone talking, 3–4 different photos/shots, and emphasise LONG / full-length video.
  */
 export async function createReelVisualPrompt(title: string, script: string): Promise<string> {
-  const system = `You are a video director. Given a study reel title and its narration script, output a single short sentence (under 100 chars) describing the VISUAL scene only: setting, style, mood. No dialogue, no on-screen text. Example: "Abstract educational scene with soft gradients and floating geometric shapes, modern and calm."`;
-  const user = `Title: ${title}\n\nNarration (for context only, do not put in video): ${script.slice(0, 300)}`;
+  const system = `You are a video director. Given a study reel title and its narration script, output a single short visual prompt (under 200 chars) for a video. CRITICAL: Emphasise that the video must be LONG and use the FULL duration — say "long video", "full-length", "extended", or "at least 10 seconds" so the result feels substantial. Other requirements:
+- The video MUST show a person talking (talking head, presenter, or educator speaking to camera).
+- The video MUST include at least 3 or 4 different photos or distinct visual shots (cut between 3–4 different images, scenes, or B-roll).
+Describe: who is speaking, the style, that it cuts between 3–4 images/shots, and that it is a LONG or full-length video. No on-screen text. Example: "Long full-length video: educator talking to camera, cutting between 4 different educational photos, extended and professional."`;
+  const user = `Title: ${title}\n\nNarration (for context only): ${script.slice(0, 300)}`;
   try {
     const prompt = await chatCompletion({ system, user, temperature: 0.6 });
-    return prompt.slice(0, 500).trim() || "Educational video scene, soft lighting, abstract shapes, study theme.";
+    const out = prompt.slice(0, 500).trim();
+    if (out) return out;
   } catch {
-    return "Educational video scene, soft lighting, abstract shapes, study theme.";
+    // fallback
   }
+  return "Long full-length video: educator or presenter talking to camera, cuts between 3 or 4 different educational photos or scenes, extended, modern and professional.";
 }

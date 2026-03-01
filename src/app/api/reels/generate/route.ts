@@ -241,7 +241,7 @@ export async function POST(request: NextRequest) {
     // Step 2: Generate MP4 (video), upload raw file — client will play MP4 + MP3 together (no ffmpeg)
     try {
       const visualPrompt = await createReelVisualPrompt(reelTitle, script);
-      const mp4Buffer = await generateVideoFromPrompt(visualPrompt, { duration: 6, resolution: "768P" });
+      const mp4Buffer = await generateVideoFromPrompt(visualPrompt, { duration: 10, resolution: "768P" });
       if (mp4Buffer && mp4Buffer.length > 0) {
         videoUrl = await uploadVideoToStorage(mp4Buffer, reelId);
       }
